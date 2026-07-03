@@ -54,7 +54,7 @@ render_head('Giriş');
 <div class="auth-split">
     <section class="auth-left">
         <div class="auth-brand">
-            <span class="sb-logo"><span class="ms">school</span></span>
+            <span class="sb-logo sb-logo--img"><img src="assets/logo.png" alt="Samsun Büyükşehir Belediyesi"></span>
             <b>Staj Takip</b>
         </div>
         <div class="auth-slogan">

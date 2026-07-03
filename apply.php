@@ -100,7 +100,7 @@ render_head('Staj Başvuru Formu');
 <body class="auth-body">
 <div class="auth-card" style="max-width: 650px; margin: 40px auto; padding: 30px;">
     <div style="text-align: center; margin-bottom: 24px;">
-        <span class="sb-logo" style="width: 50px; height: 50px; font-size: 24px; margin: 0 auto 12px;"><span class="ms">school</span></span>
+        <span class="sb-logo sb-logo--img" style="width: 50px; height: 50px; margin: 0 auto 12px;"><img src="assets/logo.png" alt="Samsun Büyükşehir Belediyesi"></span>
         <h1 style="margin: 0; font-size: 24px;">Staj Başvuru Formu</h1>
         <p class="muted">Bilgilerinizi eksiksiz doldurarak başvurunuzu gerçekleştirebilirsiniz.</p>
     </div>

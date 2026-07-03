@@ -560,7 +560,7 @@ function render_header(string $title, string $active = ''): void
 
     /* Yan menü */
     echo '<aside class="sidebar">';
-    echo '<div class="sb-brand"><span class="sb-logo"><span class="ms">school</span></span>';
+    echo '<div class="sb-brand"><span class="sb-logo sb-logo--img"><img src="assets/logo.png" alt="Samsun Büyükşehir Belediyesi"></span>';
     echo '<div><a class="sb-brand-name" href="dashboard.php">Staj Takip</a>';
     echo '<span class="sb-brand-sub">Yönetim Paneli</span></div></div>';
 
