@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // E-posta ve fotoğraf ile tüm kullanıcıları çek
-$users = db()->query('SELECT id, username, full_name, email, role, photo, created_at FROM users ORDER BY full_name')->fetchAll();
+$users = db()->query('SELECT id, username, full_name, email, role, department, photo, created_at FROM users ORDER BY full_name')->fetchAll();
 
 // Her yetkiliye atanmış stajyerler
 $assigned = [];
@@ -262,18 +262,40 @@ render_header('Yetkili Kullanıcılar', 'users');
         box-shadow: 0 0 0 3px rgba(53, 37, 205, 0.12) !important;
     }
     
-    /* Bento ve Tablo Kartlarının Tüm Kenarlık Çizgilerini Son Derece İnce ve Hafif Yap */
+    /* Theme Integration Overrides for Tailwind classes */
+    .bg-surface-container-lowest {
+        background-color: var(--card-bg) !important;
+        backdrop-filter: blur(12px) !important;
+        box-shadow: var(--shadow) !important;
+    }
+    .bg-surface-container-low,
+    .bg-surface-container-low\/50,
+    .bg-surface-container-low\/30 {
+        background-color: var(--line-soft) !important;
+    }
+    .hover\:bg-surface-container-low\/30:hover {
+        background-color: var(--hover) !important;
+    }
+    .hover\:bg-surface-container-highest:hover {
+        background-color: var(--hover) !important;
+    }
     .border-outline-variant {
-        border: 1px solid #e0e3e5 !important;
+        border: 1px solid var(--card-border) !important;
     }
     .divide-outline-variant > :not([hidden]) ~ :not([hidden]) {
-        border-color: #e0e3e5 !important;
+        border-color: var(--card-border) !important;
     }
     .border-b.border-outline-variant {
-        border-bottom: 1px solid #e0e3e5 !important;
+        border-bottom: 1px solid var(--card-border) !important;
     }
     .border-t.border-outline-variant {
-        border-top: 1px solid #e0e3e5 !important;
+        border-top: 1px solid var(--card-border) !important;
+    }
+    .text-on-surface {
+        color: var(--text) !important;
+    }
+    .text-on-surface-variant {
+        color: var(--text-2) !important;
     }
 </style>
 
@@ -349,6 +371,7 @@ render_header('Yetkili Kullanıcılar', 'users');
             <thead class="bg-surface-container-low/50 text-label-technical text-on-surface-variant uppercase tracking-wider border-b border-outline-variant">
                 <tr>
                     <th class="px-6 py-4 font-medium text-left">Kullanıcı</th>
+                    <th class="px-6 py-4 font-medium text-center">Birim</th>
                     <th class="px-6 py-4 font-medium text-center">Rol</th>
                     <th class="px-6 py-4 font-medium text-center">Stajyer Sayısı</th>
                     <th class="px-6 py-4 font-medium text-center">E-posta</th>
@@ -379,13 +402,6 @@ render_header('Yetkili Kullanıcılar', 'users');
                     $initials = mb_substr($initials, 0, 2);
                     $colorClass = $bgColors[$u['id'] % count($bgColors)];
                     
-                    // Departman ismi (Role göre dinamik mocklama)
-                    $dept = 'Birim Sorumlusu';
-                    if ($u['role'] === 'sistem_yoneticisi') {
-                        $dept = 'IT & Bilgi İşlem';
-                    } elseif ($u['role'] === 'kurum_staj_sorumlusu') {
-                        $dept = 'İnsan Kaynakları';
-                    }
                 ?>
                 <tr onclick="window.location.href='user_detail.php?id=<?= (int)$u['id'] ?>'" class="group hover:bg-surface-container-low/30 transition-all cursor-pointer">
                     <td class="px-6 py-4 text-left">
@@ -406,9 +422,13 @@ render_header('Yetkili Kullanıcılar', 'users');
                                         <span class="ml-1.5 px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded">SİZ</span>
                                     <?php endif; ?>
                                 </p>
-                                <p class="text-body-sm text-on-surface-variant m-0 mt-0.5"><?= e($dept) ?></p>
                             </div>
                         </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="text-body-md font-semibold text-on-surface">
+                            <?= !empty($u['department']) ? e($u['department']) : '<span class="text-on-surface-variant/40">—</span>' ?>
+                        </span>
                     </td>
                     <td class="px-6 py-4 text-center">
                         <?php 

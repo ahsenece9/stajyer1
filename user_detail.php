@@ -74,11 +74,13 @@ $roleLabels = [
 $roleLabel = $roleLabels[$user['role']] ?? $user['role'];
 
 // Departman belirleme
-$dept = 'Birim Sorumlusu';
-if ($user['role'] === 'sistem_yoneticisi') {
-    $dept = 'IT & Bilgi İşlem';
-} elseif ($user['role'] === 'kurum_staj_sorumlusu') {
-    $dept = 'İnsan Kaynakları';
+$dept = !empty($user['department']) ? $user['department'] : 'Birim Sorumlusu';
+if (empty($user['department'])) {
+    if ($user['role'] === 'sistem_yoneticisi') {
+        $dept = 'IT & Bilgi İşlem';
+    } elseif ($user['role'] === 'kurum_staj_sorumlusu') {
+        $dept = 'İnsan Kaynakları';
+    }
 }
 
 $userPhoto = !empty($user['photo']) ? 'uploads/' . $user['photo'] : 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2YrpFLFr6-rIUVkcgmHj0EkBcPl5GesG9LZ1m1vrb04zoGpjSSiHzTSi17DQvaEwCFNea33GK6RG4e3_89wIiIOxIn1tbXCqtz9nWeqBfH1laR-vXh6kfG2rP2kovAXpKcGGdq85ER2Tnb8iIzAfVI_Sw_hXpX9FuVHTkAhewJNwNWLpMFv4gZ9Jcc-UVPJ2cT6Z90GhvxAQYt0cOqsvFRha5Kr4D3QwgzlEifMP0OPIS6D_StJ5OXg';
@@ -203,16 +205,34 @@ render_header($user['full_name'], 'users');
         border-bottom: 2px solid #3525cd !important;
     }
     .drafting-line {
-        border-bottom: 1px solid #E2E8F0 !important;
+        border-bottom: 1px solid var(--card-border) !important;
     }
     .hide-scrollbar::-webkit-scrollbar {
         display: none;
     }
     .border-outline-variant\/30 {
-        border: 1px solid rgba(199, 196, 216, 0.3) !important;
+        border: 1px solid var(--card-border) !important;
     }
     .divide-outline-variant\/10 > :not([hidden]) ~ :not([hidden]) {
-        border-color: rgba(199, 196, 216, 0.1) !important;
+        border-color: var(--card-border) !important;
+    }
+    /* Theme Integration Overrides for Tailwind classes */
+    .bg-surface-container-lowest {
+        background-color: var(--card-bg) !important;
+        backdrop-filter: blur(12px) !important;
+        box-shadow: var(--shadow) !important;
+    }
+    .bg-surface-container-low {
+        background-color: var(--line-soft) !important;
+    }
+    .hover\:bg-surface-container-low:hover {
+        background-color: var(--hover) !important;
+    }
+    .text-on-surface {
+        color: var(--text) !important;
+    }
+    .text-on-surface-variant {
+        color: var(--text-2) !important;
     }
 </style>
 
@@ -257,15 +277,15 @@ render_header($user['full_name'], 'users');
                     <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-xs text-on-surface-variant">
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Telefon</span>
-                            <span class="font-semibold text-on-surface mt-0.5">+90 532 000 00 00</span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['phone']) ? e($user['phone']) : '<span class="text-gray-400">—</span>' ?></span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">E-posta</span>
-                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['email']) ? e($user['email']) : e($user['username']) . '@stajtakip.com' ?></span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['email']) ? e($user['email']) : '<span class="text-gray-400">—</span>' ?></span>
                         </div>
                         <div class="flex flex-col">
-                            <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Departman</span>
-                            <span class="font-semibold text-on-surface mt-0.5"><?= e($dept) ?></span>
+                            <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Departman / Unvan</span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['title']) ? e($user['title']) : e($dept) ?></span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Katılım Tarihi</span>
@@ -279,14 +299,22 @@ render_header($user['full_name'], 'users');
             <div class="border-t border-slate-100 pt-4 mt-2">
                 <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider block mb-1">Hakkında / Yönetim Rolü</span>
                 <p class="text-xs text-on-surface-variant leading-relaxed m-0">
-                    Sistem Yöneticisi yetkileri ile kullanıcı hesaplarının güvenliği, staj koordinasyonu, stajyer kayıtları ve genel departman raporlarının doğrulanmasından sorumludur.
+                    <?php
+                    if ($user['role'] === 'sistem_yoneticisi') {
+                        echo 'Sistem Yöneticisi yetkileri ile kullanıcı hesaplarının güvenliği, staj koordinasyonu, stajyer kayıtları ve genel departman raporlarının doğrulanmasından sorumludur.';
+                    } elseif ($user['role'] === 'kurum_staj_sorumlusu') {
+                        echo 'Kurum staj sorumlusu yetkileri ile genel kontenjan yönetimi, stajyer kabulleri, departman kotalarının takibi ve İK süreçlerinden sorumludur.';
+                    } else {
+                        echo 'Birim sorumlusu yetkileri ile birime atanan stajyerlerin takibi, günlük yoklama onayları ve stajyer değerlendirme işlemlerinden sorumludur.';
+                    }
+                    ?>
                 </p>
             </div>
         </div>
 
         <!-- Stats/Quick Info Card -->
         <div class="col-span-12 lg:col-span-4 grid grid-rows-2 gap-gutter">
-            <div class="bg-primary text-on-primary-container architect-shadow rounded-xl p-5 flex flex-col justify-between">
+            <div class="bg-primary text-on-primary-container architect-shadow rounded-xl p-5 flex flex-col justify-between active-interns-card">
                 <div class="flex justify-between items-start">
                     <span class="text-[9px] font-bold opacity-80 uppercase tracking-widest text-white">Aktif Stajyerler</span>
                     <span class="material-symbols-outlined text-white text-base">group</span>
@@ -399,7 +427,7 @@ render_header($user['full_name'], 'users');
     <!-- Bottom Action Footer -->
     <div class="pt-10 flex justify-end gap-4">
         <a href="settings.php" class="px-6 py-3 border border-outline-variant text-on-surface rounded-xl font-medium hover:bg-surface-container-low transition-colors" style="text-decoration: none;">Profil Düzenle</a>
-        <a href="users.php" class="px-6 py-3 bg-primary text-on-primary rounded-xl font-medium shadow-lg hover:shadow-primary/30 transition-all" style="text-decoration: none;">Yetkileri Yönet</a>
+        <a href="users.php" class="px-6 py-3 bg-primary text-on-primary rounded-xl font-medium shadow-lg hover:shadow-primary/30 transition-all manage-auths-btn" style="text-decoration: none;">Yetkileri Yönet</a>
     </div>
 </div>
 

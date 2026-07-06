@@ -13,6 +13,7 @@
 
     --bg: #091324;
     --bg-image: radial-gradient(circle at top right, #162031, #091324);
+    --chart-bar: var(--primary);
 
     --card-bg: rgba(255, 255, 255, .03);
     --card-border: rgba(255, 255, 255, .10);
@@ -39,6 +40,8 @@
     --neutral: #aab4c8; --neutral-bg: rgba(255, 255, 255, .08); --neutral-line: rgba(255,255,255,.16);
 
     --glow: 0 0 15px rgba(99, 102, 241, .30);
+    --glow-btn: 0 4px 20px rgba(99, 102, 241, .30);
+    --glow-btn-hover: 0 6px 26px rgba(99, 102, 241, .45);
     --shadow: 0 24px 56px rgba(0, 0, 0, .35);
 
     --radius: 16px;
@@ -48,37 +51,119 @@
 
 html[data-theme="light"] {
     /* ---- Açık tema: Pro-Architect Light ---- */
-    --font-head: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-head: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
     --bg: #f7f9fb;
     --bg-image: none;
+    --chart-bar: #4f46e5;
 
-    --card-bg: #ffffff;
-    --card-border: #e0e3e5;
-    --panel-bg: #ffffff;
+    --card-bg: rgba(255, 255, 255, 0.70);
+    --card-border: rgba(224, 227, 229, 0.80);
+    --panel-bg: rgba(255, 255, 255, 0.85);
 
     --text: #191c1e;
     --text-2: #464555;
     --muted: #777587;
 
-    --line: #e0e3e5;
-    --line-soft: #eceef0;
-    --hover: #f2f4f6;
+    --line: rgba(224, 227, 229, 0.80);
+    --line-soft: rgba(236, 238, 240, 0.80);
+    --hover: rgba(242, 244, 246, 0.80);
 
-    --primary: #4f46e5;
-    --primary-2: #3525cd;
-    --accent: #3525cd;
+    --primary: #1e293b;
+    --primary-2: #0f172a;
+    --accent: #1e3a8a;
 
-    --input-bg: #ffffff;
-    --input-border: #c7c4d8;
+    --input-bg: rgba(255, 255, 255, 0.60);
+    --input-border: #cbd5e1;
 
     --success: #067647; --success-bg: #ecfdf3; --success-line: #abefc6;
     --warning: #b54708; --warning-bg: #fffaeb; --warning-line: #fedf89;
     --danger:  #d92d20; --danger-bg:  #fef3f2; --danger-line:  #fecdca;
     --neutral: #565e74; --neutral-bg: #f2f4f7; --neutral-line: #e0e3e5;
 
-    --glow: 0 4px 14px rgba(79, 70, 229, .25);
+    --glow: 0 4px 12px rgba(15, 23, 42, 0.12);
+    --glow-btn: 0 2px 8px rgba(15, 23, 42, .08);
+    --glow-btn-hover: 0 4px 12px rgba(15, 23, 42, .14);
     --shadow: 0 4px 20px rgba(15, 23, 42, .08);
+}
+
+html[data-theme="ocean"] {
+    /* ---- Koyu Tema: Deep Ocean ---- */
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-head: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    --bg: #0f0d36;
+    --bg-image: radial-gradient(circle at top right, #1E1B4B, #0a0825);
+    --chart-bar: var(--primary);
+
+    --card-bg: rgba(19, 17, 60, 0.50);
+    --card-border: rgba(255, 255, 255, .15);
+    --panel-bg: rgba(15, 13, 54, 0.75);
+
+    --text: #ffffff;                          /* Tam beyaz */
+    --text-2: #d2cfee;                        /* Daha parlak, okunabilir açık mavi */
+    --muted: #a19ebf;                         /* Belirgin ocean grisi */
+
+    --line: rgba(255, 255, 255, .10);
+    --line-soft: rgba(255, 255, 255, .06);
+    --hover: rgba(255, 255, 255, .06);
+
+    --primary: #a5b4fc;                       /* Daha parlak indigo */
+    --primary-2: #1e1b4b;
+    --accent: #c7d2fe;
+
+    --input-bg: rgba(22, 20, 68, 0.60);
+    --input-border: #2e2a74;
+
+    --success: #34d399; --success-bg: rgba(16, 185, 129, .12); --success-line: rgba(16, 185, 129, .28);
+    --warning: #fbbf24; --warning-bg: rgba(245, 158, 11, .12); --warning-line: rgba(245, 158, 11, .30);
+    --danger:  #f87171; --danger-bg:  rgba(239, 68, 68, .13);  --danger-line:  rgba(239, 68, 68, .32);
+    --neutral: #aab4c8; --neutral-bg: rgba(255, 255, 255, .08); --neutral-line: rgba(255,255,255,.16);
+
+    --glow: 0 0 15px rgba(129, 140, 248, .30);
+    --glow-btn: 0 4px 20px rgba(129, 140, 248, .25);
+    --glow-btn-hover: 0 6px 26px rgba(129, 140, 248, .40);
+    --shadow: 0 24px 56px rgba(0, 0, 0, .35);
+}
+
+html[data-theme="rose"] {
+    /* ---- Açık Tema: Rose Petal ---- */
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-head: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --bg: #fff0f5;
+    --bg-image: none;
+    --chart-bar: var(--primary);
+
+    --card-bg: rgba(255, 255, 255, 0.70);
+    --card-border: rgba(240, 211, 223, 0.80);
+    --panel-bg: rgba(255, 255, 255, 0.85);
+
+    --text: #301723;                          /* Çok daha koyu plum */
+    --text-2: #5c3d4c;                        /* Daha belirgin koyu gül tonu */
+    --muted: #7d596a;                         /* Okunabilir orta-koyu gri-pembe */
+
+    --line: rgba(240, 211, 223, 0.80);
+    --line-soft: rgba(249, 235, 241, 0.80);
+    --hover: rgba(255, 245, 248, 0.80);
+
+    --primary: #c74d75;                       /* Daha canlı/koyu pembe */
+    --primary-2: #ab3258;
+    --accent: #ab3258;                        /* Breadcrumb okunurluğu için koyu pembe */
+
+    --input-bg: rgba(255, 255, 255, 0.60);
+    --input-border: #e8b8cc;
+
+    --success: #067647; --success-bg: #ecfdf3; --success-line: #abefc6;
+    --warning: #b54708; --warning-bg: #fffaeb; --warning-line: #fedf89;
+    --danger:  #d92d20; --danger-bg:  #fef3f2; --danger-line:  #fecdca;
+    --neutral: #565e74; --neutral-bg: #f2f4f7; --neutral-line: #e0e3e5;
+
+    --glow: 0 4px 14px rgba(219, 112, 147, .25);
+    --glow-btn: 0 4px 20px rgba(219, 112, 147, .25);
+    --glow-btn-hover: 0 6px 26px rgba(219, 112, 147, .40);
+    --shadow: 0 4px 20px rgba(74, 44, 58, .08);
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -171,10 +256,10 @@ h1, h2, h3, h4 { font-family: var(--font-head); }
     background: linear-gradient(90deg, var(--primary) 0%, var(--primary-2) 100%);
     color: #fff; font-weight: 700; font-size: 13.5px; font-family: inherit;
     border: none; border-radius: 12px; cursor: pointer; text-decoration: none;
-    box-shadow: 0 4px 20px rgba(99, 102, 241, .35);
+    box-shadow: var(--glow-btn);
     transition: transform .15s ease, box-shadow .15s ease;
 }
-.sb-add:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99, 102, 241, .5); }
+.sb-add:hover { transform: translateY(-1px); box-shadow: var(--glow-btn-hover); }
 
 .sb-user {
     display: flex; align-items: center; gap: 10px;
@@ -372,7 +457,7 @@ td.actions form { display: inline; }
 .badge-bitti     { background: var(--neutral-bg); color: var(--neutral); border-color: var(--neutral-line); }
 .badge-baslamadi { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-line); }
 .badge-devamsiz  { background: var(--danger-bg);  color: var(--danger);  border-color: var(--danger-line); }
-.badge-info      { background: rgba(99,102,241,.14); color: var(--primary); border-color: rgba(99,102,241,.3); }
+.badge-info      { background: var(--neutral-bg); color: var(--primary); border-color: var(--neutral-line); }
 
 /* ============================================================
    Butonlar
@@ -388,9 +473,9 @@ td.actions form { display: inline; }
 .btn-primary {
     background: linear-gradient(90deg, var(--primary) 0%, var(--primary-2) 100%);
     color: #fff;
-    box-shadow: 0 4px 20px rgba(99, 102, 241, .35), inset 0 1px 0 rgba(255, 255, 255, .15);
+    box-shadow: var(--glow-btn), inset 0 1px 0 rgba(255, 255, 255, .15);
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 26px rgba(99, 102, 241, .5), inset 0 1px 0 rgba(255,255,255,.15); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: var(--glow-btn-hover), inset 0 1px 0 rgba(255,255,255,.15); }
 .btn-light {
     background: var(--card-bg); color: var(--text);
     border-color: var(--card-border); backdrop-filter: blur(8px);
@@ -426,7 +511,7 @@ input:focus, textarea:focus, select:focus {
 }
 input[type=file] { color: var(--muted); }
 input[type=date] { color-scheme: dark; }
-html[data-theme="light"] input[type=date] { color-scheme: light; }
+html[data-theme="light"] input[type=date], html[data-theme="rose"] input[type=date] { color-scheme: light; }
 
 fieldset {
     background: var(--card-bg); backdrop-filter: blur(12px);
@@ -588,12 +673,22 @@ legend {
 }
 .cal-day.wknd { opacity: .38; color: var(--muted); }
 .cal-day.fut  { background: var(--card-bg); border: 1px solid var(--line-soft); color: var(--text-2); }
-html[data-theme="light"] .cal-day.fut { background: #ffffff; }
+html[data-theme="light"] .cal-day.fut, html[data-theme="rose"] .cal-day.fut { background: #ffffff; }
 .cal-day.geldi { background: var(--success-bg); border-color: var(--success-line); color: var(--success); }
 .cal-day.dev   { background: var(--danger-bg);  border-color: var(--danger-line);  color: var(--danger); }
 .cal-day.izin  { background: var(--warning-bg); border-color: var(--warning-line); color: var(--warning); }
 .cal-day.rapor { background: rgba(99, 102, 241, .12); border-color: rgba(99, 102, 241, .28); color: var(--primary); }
 .cal-day.today { box-shadow: 0 0 0 2px var(--primary); }
+.cal-day.today-pending {
+    background: var(--neutral-bg) !important;
+    border-color: var(--neutral-line) !important;
+    color: var(--muted) !important;
+}
+html[data-theme="light"] .cal-day.today-pending, 
+html[data-theme="rose"] .cal-day.today-pending {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+}
 
 /* Durum yazısı renkli noktalar */
 .cal-day.clickable .s { display: inline-flex; align-items: center; gap: 5px; }
@@ -650,7 +745,7 @@ html[data-theme="light"] .cal-day.fut { background: #ffffff; }
 .chart-col .bar-area { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
 .chart-col .bar {
     width: 34px; max-width: 60%;
-    background: var(--primary); border-radius: 6px 6px 0 0;
+    background: var(--chart-bar); border-radius: 6px 6px 0 0;
     transition: filter .15s ease;
 }
 .chart-col:hover .bar { filter: brightness(1.15); }
@@ -775,6 +870,8 @@ html[data-theme="light"] .cal-day.fut { background: #ffffff; }
     color: #e2e8f0;
 }
 html[data-theme="light"] .auth-left { background: radial-gradient(700px 400px at 80% 10%, rgba(255,255,255,.18), transparent 60%), #4f46e5; }
+html[data-theme="rose"] .auth-left { background: radial-gradient(700px 400px at 80% 10%, rgba(255,255,255,.18), transparent 60%), #DB7093; }
+html[data-theme="ocean"] .auth-left { background: radial-gradient(700px 400px at 80% 10%, rgba(255,255,255,.10), transparent 60%), #1E1B4B; }
 .auth-left::after {
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .16;
     background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px),
@@ -872,7 +969,7 @@ html[data-theme="light"] .auth-left { background: radial-gradient(700px 400px at
     box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.2);
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-html[data-theme="light"] .floating-save-bar {
+html[data-theme="light"] .floating-save-bar, html[data-theme="rose"] .floating-save-bar {
     background: rgba(255,255,255,0.85);
 }
 @keyframes slideUp {
@@ -1047,4 +1144,256 @@ html[data-theme="light"] .floating-save-bar {
 .profile-dropdown .dropdown-menu a:hover {
     background: var(--hover);
     color: var(--text);
+}
+
+/* Tailwind text color overrides to match active theme primary/secondary variables */
+.text-primary {
+    color: var(--primary) !important;
+}
+.text-secondary {
+    color: var(--accent) !important;
+}
+
+/* Custom Background Image Text Readability Helpers */
+/* Başlıklar için (h1, h2) */
+html.has-custom-bg[data-theme="dark"] .content h1,
+html.has-custom-bg[data-theme="ocean"] .content h1,
+html.has-custom-bg[data-theme="dark"] .content h2,
+html.has-custom-bg[data-theme="ocean"] .content h2 {
+    color: #ffffff !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* Alt açıklamalar, etiketler ve sayfa yolları (p, nav, span, label) */
+html.has-custom-bg[data-theme="dark"] .content p,
+html.has-custom-bg[data-theme="ocean"] .content p,
+html.has-custom-bg[data-theme="dark"] .content nav,
+html.has-custom-bg[data-theme="ocean"] .content nav,
+html.has-custom-bg[data-theme="dark"] .content nav span,
+html.has-custom-bg[data-theme="ocean"] .content nav span,
+html.has-custom-bg[data-theme="dark"] .content .page-sub,
+html.has-custom-bg[data-theme="ocean"] .content .page-sub {
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Kartların ve panellerin içindeki başlık ve yazıları sıfırla (onlar zaten cam efektiyle korunuyor) */
+html.has-custom-bg[data-theme="dark"] .card h1,
+html.has-custom-bg[data-theme="ocean"] .card h1,
+html.has-custom-bg[data-theme="dark"] .card h2,
+html.has-custom-bg[data-theme="ocean"] .card h2,
+html.has-custom-bg[data-theme="dark"] .card p,
+html.has-custom-bg[data-theme="ocean"] .card p,
+html.has-custom-bg[data-theme="dark"] .card nav,
+html.has-custom-bg[data-theme="ocean"] .card nav,
+html.has-custom-bg[data-theme="dark"] .card span,
+html.has-custom-bg[data-theme="ocean"] .card span,
+html.has-custom-bg[data-theme="dark"] .bg-surface-container-lowest h1,
+html.has-custom-bg[data-theme="ocean"] .bg-surface-container-lowest h1,
+html.has-custom-bg[data-theme="dark"] .bg-surface-container-lowest h2,
+html.has-custom-bg[data-theme="ocean"] .bg-surface-container-lowest h2,
+html.has-custom-bg[data-theme="dark"] .bg-surface-container-lowest p,
+html.has-custom-bg[data-theme="ocean"] .bg-surface-container-lowest p,
+html.has-custom-bg[data-theme="dark"] .bg-surface-container-lowest nav,
+html.has-custom-bg[data-theme="ocean"] .bg-surface-container-lowest nav,
+html.has-custom-bg[data-theme="dark"] .bg-surface-container-lowest span,
+html.has-custom-bg[data-theme="ocean"] .bg-surface-container-lowest span {
+    color: inherit !important;
+    text-shadow: none !important;
+}
+
+/* Animation Toggle Button (Topbar) */
+.anim-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+.anim-toggle-btn:hover {
+    background: var(--hover);
+    border-color: var(--primary);
+    transform: scale(1.06);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.1);
+}
+.anim-toggle-btn .ms {
+    font-variation-settings: 'FILL' 0;
+    transition: transform 0.25s ease, color 0.25s ease;
+}
+.anim-toggle-btn.active {
+    background: var(--hover);
+    border-color: var(--primary);
+}
+.anim-toggle-btn.active .ms {
+    font-variation-settings: 'FILL' 1;
+    color: var(--primary) !important;
+}
+
+@keyframes spin-around {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Rose Petal Canvas Animation Display Controls */
+#rose-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: none;
+    pointer-events: none;
+}
+html[data-theme="rose"].has-bg-animation #rose-bg {
+    display: block !important;
+}
+/* Arka plan resmi seçilmemişse (Düz Renk ise), animasyon aktifken gür degrade arka planı uygula */
+html[data-theme="rose"].has-bg-animation:not(.has-custom-bg) body {
+    background: linear-gradient(135deg, #fde4ec 0%, #fbd0e0 45%, #f6b9d0 100%) !important;
+}
+
+/* Ocean Canvas Animation Display Controls */
+#ocean-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: none;
+    pointer-events: none;
+}
+html[data-theme="ocean"].has-bg-animation #ocean-bg {
+    display: block !important;
+}
+/* Arka plan resmi seçilmemişse (Düz Renk ise), animasyon aktifken gür okyanus degrade arka planı uygula */
+html[data-theme="ocean"].has-bg-animation:not(.has-custom-bg) body {
+    background: linear-gradient(160deg, #0a2e52 0%, #0d4d7a 45%, #1e88a8 100%) !important;
+}
+
+/* ============================================================
+   Sol Menü Daraltma (Sidebar Collapse) Tasarımı
+   ============================================================ */
+.sidebar {
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.main {
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Daraltılmış Sidebar için Durum Kuralları */
+.sidebar-collapsed .sidebar,
+.sidebar-collapsed-state .sidebar {
+    width: 76px !important;
+    padding: 16px 8px !important;
+}
+
+.sidebar-collapsed .main,
+.sidebar-collapsed-state .main {
+    margin-left: 76px !important;
+}
+
+/* Daralınca Başlığı ve Yazıları Gizle */
+.sidebar-collapsed .sb-brand-text,
+.sidebar-collapsed-state .sb-brand-text {
+    display: none !important;
+}
+
+.sidebar-collapsed .sidebar nav a span:not(.ms),
+.sidebar-collapsed-state .sidebar nav a span:not(.ms) {
+    display: none !important;
+}
+
+/* Daralınca Menü Linklerini Ortala ve Yazı Boyutunu Sıfırla */
+.sidebar-collapsed .sidebar nav a,
+.sidebar-collapsed-state .sidebar nav a {
+    justify-content: center !important;
+    padding: 12px 0 !important;
+    font-size: 0 !important;
+}
+
+.sidebar-collapsed .sidebar nav a span.ms,
+.sidebar-collapsed-state .sidebar nav a span.ms {
+    margin: 0 !important;
+    font-size: 20px !important; /* Simge boyutu korunur */
+}
+
+/* Daralınca Marka Logosunu ve Butonunu Dikey Hizala */
+.sidebar-collapsed .sb-brand,
+.sidebar-collapsed-state .sb-brand {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 12px 0 20px !important;
+    gap: 12px !important;
+}
+
+.sidebar-collapsed .sb-brand-left,
+.sidebar-collapsed-state .sb-brand-left {
+    justify-content: center !important;
+    width: 100% !important;
+}
+
+/* ============================================================
+   Açık Temada Sol Panel (Sidebar) Aktif Buton Krem Rengi Overrides
+   ============================================================ */
+html[data-theme="light"] .sidebar nav a.active {
+    background: #efede6 !important; /* Soft, clean cream / dirty white */
+    color: #191c1e !important; /* Dark text */
+    box-shadow: var(--glow) !important; /* Original theme shadow */
+}
+
+html[data-theme="light"] .sidebar nav a.active span.ms {
+    color: #191c1e !important;
+}
+
+/* ============================================================
+   Tablo Başlıklarını Ortalama (Table Headers Centered Only)
+   ============================================================ */
+table th, thead th {
+    text-align: center !important;
+}
+
+/* ============================================================
+   Açık Temada Birincil Butonlar Krem Rengi Overrides
+   ============================================================ */
+html[data-theme="light"] .btn-primary,
+html[data-theme="light"] #profileSaveBtn,
+html[data-theme="light"] button.bg-primary,
+html[data-theme="light"] .manage-auths-btn {
+    background: #efede6 !important;
+    color: #191c1e !important;
+    border: 1px solid rgba(25, 28, 30, 0.15) !important;
+    box-shadow: 0 2px 8px rgba(25, 28, 30, 0.04) !important;
+}
+html[data-theme="light"] .btn-primary:hover,
+html[data-theme="light"] #profileSaveBtn:not(:disabled):hover,
+html[data-theme="light"] button.bg-primary:hover,
+html[data-theme="light"] .manage-auths-btn:hover {
+    background: #e5e3da !important;
+    color: #191c1e !important;
+    box-shadow: 0 4px 12px rgba(25, 28, 30, 0.08) !important;
+}
+html[data-theme="light"] .btn-primary span.ms,
+html[data-theme="light"] button.bg-primary span.ms,
+html[data-theme="light"] .manage-auths-btn span.ms {
+    color: #191c1e !important;
+}
+
+/* ============================================================
+   Açık Temada Kullanıcı Detay Kartı Krem Rengi Overrides
+   ============================================================ */
+html[data-theme="light"] .active-interns-card {
+    background: #efede6 !important;
+    color: #191c1e !important;
+    border: 1px solid rgba(25, 28, 30, 0.15) !important;
+    box-shadow: 0 2px 8px rgba(25, 28, 30, 0.04) !important;
+}
+html[data-theme="light"] .active-interns-card * {
+    color: #191c1e !important;
+    opacity: 1 !important;
 }

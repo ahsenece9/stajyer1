@@ -91,7 +91,7 @@ render_head('Dijital Yoklama Sistemi');
 <body class="auth-body">
 <div class="auth-card" style="max-width: 480px; margin: 60px auto; padding: 30px;">
     <div style="text-align: center; margin-bottom: 24px;">
-        <span class="sb-logo" style="width: 50px; height: 50px; font-size: 24px; margin: 0 auto 12px; background:var(--primary); color:white;"><span class="ms">schedule</span></span>
+        <span class="sb-logo" style="width: 50px; height: 50px; margin: 0 auto 12px; background:transparent; border:none; padding:0; box-shadow:none;"><img src="<?= logo_url() ?>" style="width:100%; height:100%; object-fit:contain;"></span>
         <h1 style="margin: 0; font-size: 24px;">Dijital Yoklama Sistemi</h1>
         <p class="muted">Kurumsal Ağ veya QR Kod Giriş/Çıkış Sistemi</p>
     </div>
@@ -134,14 +134,10 @@ render_head('Dijital Yoklama Sistemi');
                 <input type="text" name="tc_no" required maxlength="11" minlength="11" pattern="\d{11}" placeholder="11 haneli T.C. Kimlik numaranız" style="font-size: 16px; text-align: center; letter-spacing: 0.1em;">
             </label>
 
-            <div class="grid-2" style="margin-top: 24px; gap:16px;">
-                <button type="submit" name="action" value="giris" class="btn btn-primary" style="padding: 16px; font-size:15px; font-weight:700; display:flex; flex-direction:column; align-items:center; gap:6px;">
-                    <span class="ms" style="font-size:24px;">login</span>
-                    <span>GİRİŞ YAP (Check-In)</span>
-                </button>
-                <button type="submit" name="action" value="cikis" class="btn btn-light" style="padding: 16px; font-size:15px; font-weight:700; border: 1px solid var(--primary); color: var(--primary); display:flex; flex-direction:column; align-items:center; gap:6px;">
-                    <span class="ms" style="font-size:24px;">logout</span>
-                    <span>ÇIKIŞ YAP (Check-Out)</span>
+            <div style="display: flex; justify-content: center; margin-top: 24px;">
+                <button type="submit" name="action" value="giris" class="btn btn-primary" style="padding: 11px 24px; font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; width: auto; min-width: 210px; justify-content: center; cursor: pointer; border-radius: 12px; border: none;">
+                    <span class="ms" style="font-size:18px; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;"><?= svg_icon('login') ?></span>
+                    <span>Giriş Yap (Check-In)</span>
                 </button>
             </div>
         </form>
