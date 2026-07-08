@@ -5,6 +5,27 @@ require_once __DIR__ . '/auth.php';
 
 $myId = (int) $_SESSION['user_id'];
 
+// Check and add columns to users table if they are missing
+$columns = [
+    'phone' => 'VARCHAR(50) NULL',
+    'address' => 'TEXT NULL',
+    'bio' => 'TEXT NULL',
+    'birth_date' => 'VARCHAR(20) NULL',
+    'title' => 'VARCHAR(100) NULL',
+    'department' => 'VARCHAR(150) NULL'
+];
+foreach ($columns as $col => $definition) {
+    try {
+        db()->query("SELECT $col FROM users LIMIT 1");
+    } catch (PDOException $e) {
+        try {
+            db()->exec("ALTER TABLE users ADD COLUMN $col $definition");
+        } catch (PDOException $ex) {
+            // Ignore error
+        }
+    }
+}
+
 // Mevcut kullanıcı bilgilerini çek
 $stmt = db()->prepare('SELECT * FROM users WHERE id = ?');
 $stmt->execute([$myId]);
@@ -15,8 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'profile') {
-        $fullName = trim((string) ($_POST['full_name'] ?? ''));
-        $email     = trim((string) ($_POST['email'] ?? ''));
+        $fullName   = trim((string) ($_POST['full_name'] ?? ''));
+        $email      = trim((string) ($_POST['email'] ?? ''));
+        $phone      = trim((string) ($_POST['phone'] ?? ''));
+        $address    = trim((string) ($_POST['address'] ?? ''));
+        $bio        = trim((string) ($_POST['bio'] ?? ''));
+        $birthDate  = trim((string) ($_POST['birth_date'] ?? ''));
+        // Görev/Unvan formdan kaldırıldı; mevcut değer korunur (rol zaten ayrı gösteriliyor)
+        $title      = (string) ($me['title'] ?? '');
+        $department = trim((string) ($_POST['department'] ?? ''));
+
+        $removePhoto = (($_POST['remove_photo'] ?? '0') === '1');
 
         // Fotoğraf yükleme işlemi
         $newPhoto = null;
@@ -42,15 +72,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Tam Ad alanı boş bırakılamaz.');
         } else {
             if ($newPhoto !== null) {
-                db()->prepare('UPDATE users SET full_name = ?, email = ?, photo = ? WHERE id = ?')
-                    ->execute([$fullName, $email, $newPhoto, $myId]);
+                // Yeni fotoğraf yüklendi
+                db()->prepare('UPDATE users SET full_name = ?, email = ?, phone = ?, address = ?, bio = ?, birth_date = ?, title = ?, department = ?, photo = ? WHERE id = ?')
+                    ->execute([$fullName, $email, $phone, $address, $bio, $birthDate, $title, $department, $newPhoto, $myId]);
+            } elseif ($removePhoto) {
+                // Mevcut fotoğraf kaldırıldı → dosyayı sil, sütunu NULL yap
+                if (!empty($me['photo'])) {
+                    @unlink(UPLOAD_DIR . '/' . $me['photo']);
+                }
+                db()->prepare('UPDATE users SET full_name = ?, email = ?, phone = ?, address = ?, bio = ?, birth_date = ?, title = ?, department = ?, photo = NULL WHERE id = ?')
+                    ->execute([$fullName, $email, $phone, $address, $bio, $birthDate, $title, $department, $myId]);
             } else {
-                db()->prepare('UPDATE users SET full_name = ?, email = ? WHERE id = ?')
-                    ->execute([$fullName, $email, $myId]);
+                db()->prepare('UPDATE users SET full_name = ?, email = ?, phone = ?, address = ?, bio = ?, birth_date = ?, title = ?, department = ? WHERE id = ?')
+                    ->execute([$fullName, $email, $phone, $address, $bio, $birthDate, $title, $department, $myId]);
             }
             $_SESSION['user_name'] = $fullName;
-            log_action('profil_guncelle', 'Ad: ' . $fullName . ', E-posta: ' . $email);
-            flash_set('success', 'Profil bilgileriniz güncellendi.');
+            log_action('profil_guncelle', 'Ad: ' . $fullName . ', E-posta: ' . $email . ($removePhoto ? ' (fotoğraf kaldırıldı)' : ''));
+            flash_set('success', $removePhoto ? 'Profil güncellendi, fotoğraf kaldırıldı.' : 'Profil bilgileriniz güncellendi.');
         }
         redirect('settings.php');
     }
@@ -82,7 +120,7 @@ $stmt->execute([$myId]);
 $me = $stmt->fetch();
 
 $initials = mb_strtoupper(mb_substr($me['full_name'] ?? '', 0, 1, 'UTF-8'), 'UTF-8');
-$userPhotoUrl = !empty($me['photo']) ? 'uploads/' . $me['photo'] : 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCegj1Wl6UmMlarZfs9im9qJqXBcU1Bglv1E_UFc9HU6R6ttyeAfZgDyfBOe_hYwVqZO8qg3QcmGs9dhCW41_Cl8GjwmBd2N32Hg4bFOOWoDCRxWCKgmR_nkHnDjJfqSlVC9xqWU_cY9HMBkwx4i35hPQ76SrTmfsVEo4edT4ZU9R251zxA2wJi0avq7nAaPzNfTWnWOvHEhokOcSoOyDT-bTQRbLjdtZjgpq7zoECE43J-IS1Zjx9bw';
+$userPhotoUrl = !empty($me['photo']) ? 'uploads/' . $me['photo'] : '';
 
 $roleLabels = [
     'sistem_yoneticisi' => 'Sistem Yöneticisi',
@@ -93,6 +131,15 @@ $roleLabel = $roleLabels[$me['role']] ?? 'Birim Sorumlusu';
 
 // Hazır temalar ve gelecekte eklenecek temalar için dinamik array
 $availableThemes = [
+    'corporate' => [
+        'name' => 'Kurumsal (Default)',
+        'desc' => 'Lacivert & turuncu resmi görünüm',
+        'preview_bg' => 'bg-[#1A3673]',
+        'preview_elements' => '<div class="absolute inset-0 p-3 flex gap-2"><div class="w-12 h-full bg-white/10 rounded-sm"></div><div class="flex-1 space-y-2"><div class="w-1/2 h-2 bg-[#F58220]/60 rounded-full"></div><div class="w-3/4 h-2 bg-white/20 rounded-full"></div></div></div>',
+        'card_bg' => 'bg-[#1A3673]',
+        'text_color' => 'text-white',
+        'desc_color' => 'text-white/60'
+    ],
     'dark' => [
         'name' => 'Koyu Tema',
         'desc' => 'Lacivert komuta merkezi görünümü',
@@ -110,6 +157,34 @@ $availableThemes = [
         'card_bg' => 'bg-white',
         'text_color' => 'text-on-surface',
         'desc_color' => 'text-on-surface-variant'
+    ],
+    'ocean' => [
+        'name' => 'Deep Ocean',
+        'desc' => 'Okyanus derinliği ve koyu mavi',
+        'preview_bg' => 'bg-[#1E1B4B]',
+        'preview_elements' => '<div class="absolute inset-0 p-3 flex gap-2"><div class="w-12 h-full bg-white/5 rounded-sm"></div><div class="flex-1 space-y-2"><div class="w-1/2 h-2 bg-[#818cf8]/40 rounded-full"></div><div class="w-3/4 h-2 bg-white/10 rounded-full"></div></div></div>',
+        'card_bg' => 'bg-[#1E1B4B]',
+        'text_color' => 'text-white',
+        'desc_color' => 'text-white/50'
+    ],
+    'rose' => [
+        'name' => 'Rose Petal',
+        'desc' => 'Gül yaprağı açık pembe görünüm',
+        'preview_bg' => 'bg-[#DB7093]',
+        'preview_elements' => '<div class="absolute inset-0 p-3 flex gap-2"><div class="w-12 h-full bg-[#4a2c3a]/5 rounded-sm"></div><div class="flex-1 space-y-2"><div class="w-1/2 h-2 bg-[#DB7093]/40 rounded-full"></div><div class="w-3/4 h-2 bg-[#4a2c3a]/10 rounded-full"></div></div></div>',
+        'card_bg' => 'bg-[#fff0f5]',
+        'text_color' => 'text-neutral-800',
+        'desc_color' => 'text-neutral-500'
+    ],
+    'coming_soon' => [
+        'name' => 'Yakında',
+        'desc' => 'Yeni tema eklenecek',
+        'preview_bg' => 'bg-[#2a2a2a]',
+        'preview_elements' => '<div class="absolute inset-0 flex items-center justify-center text-white/30 text-[10px] font-bold uppercase tracking-widest">Yakında</div>',
+        'card_bg' => 'bg-[#1f1f1f]',
+        'text_color' => 'text-white/40',
+        'desc_color' => 'text-white/25',
+        'coming_soon' => true
     ],
 ];
 
@@ -164,7 +239,7 @@ render_header('Ayarlar', 'settings');
                     "tertiary-container": "#516177",
                     "inverse-on-surface": "#eff1f3",
                     "on-secondary": "#ffffff",
-                    "primary": "#3525cd",
+                    "primary": "var(--primary)",
                     "on-tertiary-container": "#ccdcf7",
                     "on-primary": "#ffffff",
                     "on-error": "#ffffff",
@@ -213,152 +288,271 @@ render_header('Ayarlar', 'settings');
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
 
-    /* Input Girdileri - Daha ufak ve kompakt tasarım */
+    /* Universal settings card compact overrides (slightly relaxed for natural breathing room) */
+    .card {
+        padding: 20px 24px !important; /* relaxed padding */
+        margin-bottom: 20px !important;
+        display: block !important;
+        height: auto !important;
+    }
+    .card form {
+        display: block !important;
+        margin: 0 !important;
+    }
+    
+    /* Gaps between card titles and descriptions */
+    .card h3, .card h2 {
+        margin: 0 !important;
+    }
+    .card p {
+        margin: 4px 0 0 0 !important; /* comfortable spacing */
+    }
+    .card .mb-6 {
+        margin-bottom: 16px !important;
+    }
+    
+    /* Input Girdileri - Universal ufak ve kompakt tasarım */
     .settings-input-group label {
         display: block !important;
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 10.5px !important;
+        font-size: 9.5px !important;
         color: var(--text-2) !important;
         text-transform: uppercase !important;
         letter-spacing: 0.05em !important;
         font-weight: 700 !important;
-        margin-bottom: 5px !important;
+        margin-bottom: 4px !important;
     }
-    .settings-input-group input {
+    .settings-input-group input, .settings-input-group textarea {
         width: 100% !important;
         background-color: var(--input-bg) !important;
         border: 1px solid var(--input-border) !important;
-        border-radius: 8px !important;
-        padding: 9px 12px !important;
-        font-size: 13.5px !important;
+        border-radius: 6px !important;
+        padding: 8px 12px !important; /* comfortable padding */
+        font-size: 13px !important;
         color: var(--text) !important;
         outline: none !important;
         transition: all 0.2s ease !important;
+        margin-bottom: 0px !important;
     }
-    .settings-input-group input:focus {
+    .settings-input-group input:focus, .settings-input-group textarea:focus {
         border-color: var(--primary) !important;
         box-shadow: 0 0 0 3px rgba(53, 37, 205, 0.12) !important;
     }
     
-    /* Kartların yüksekliklerini ve buton hizalamalarını eşitle */
-    .settings-grid-container > section {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        justify-content: space-between;
+    /* Profile & Password Form Custom Underline Input Style */
+    #profile-form input, #password-form input {
+        border: none !important;
+        border-bottom: 1.5px solid var(--input-border) !important;
+        border-radius: 0px !important;
+        background: transparent !important;
+        padding: 6px 0px !important; /* comfortable vertical padding */
+        box-shadow: none !important;
+        transition: border-color 0.2s ease !important;
+        width: 100% !important;
     }
-    .settings-grid-container > section > form {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        justify-content: space-between;
+    #profile-form input:focus, #password-form input:focus {
+        border-color: var(--primary) !important;
+        outline: none !important;
+    }
+    #profileSaveBtn:disabled {
+        opacity: 0.45 !important;
+        cursor: not-allowed !important;
+        pointer-events: none !important;
+        box-shadow: none !important;
+        transform: none !important;
+    }
+    
+    /* Remove vertical spacing variables in tailwind layout rules */
+    .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 12px !important;
+    }
+    .grid {
+        gap: 16px !important;
+    }
+    
+    /* Theme Card & Background Card Styling - Clear borders & shadow to stand out against white background */
+    .theme-card, .bg-card {
+        border: 1px solid rgba(0, 0, 0, 0.15) !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        background-color: var(--card-bg) !important;
+    }
+    html[data-theme="light"] .theme-card, 
+    html[data-theme="light"] .bg-card {
+        border-color: #cbd5e1 !important; /* solid gray border for visibility in light theme */
+        background-color: #ffffff !important;
+    }
+    .theme-card:hover, .bg-card:hover {
+        border-color: var(--primary) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* Hover scale for background selection items */
+    .bg-card {
+        border-radius: 8px !important;
     }
 </style>
 
 <div class="mb-6">
-    <h2 class="text-xl font-extrabold text-[var(--text)] m-0">Ayarlar</h2>
-    <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Sistem tercihlerinizi ve kişisel bilgilerinizi buradan yönetin.</p>
+    <div class="text-[11px] text-[var(--text-2)] mb-2">
+        <a href="dashboard.php" class="hover:underline text-[var(--text-2)]">Ana Sayfa</a> / 
+        <a href="settings.php" class="hover:underline text-[var(--text-2)]">Profil Ayarları</a> / 
+        <span class="text-[var(--text)] font-semibold">Kişisel Bilgiler</span>
+    </div>
+    <h2 class="text-xl font-extrabold text-[var(--text)] m-0">Modern Kurumsal Profil Ayarları</h2>
+    <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Kişisel bilgilerinizi ve avatarınızı güncelleyin.</p>
 </div>
 
 <div class="settings-grid-container grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
     <!-- Profile Settings Section -->
-    <section class="lg:col-span-6 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 shadow-[0_4px_16px_rgba(15,23,42,0.03)] relative overflow-hidden group">
+    <section class="lg:col-span-6 card relative overflow-hidden group">
         <div class="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-bl-full -mr-8 -mt-8 transition-transform duration-500 group-hover:scale-110"></div>
         <div class="flex items-center justify-between mb-6">
             <div>
-                <h3 class="text-base font-bold text-[var(--text)] m-0">Profil Ayarları</h3>
+                <h3 class="text-base font-bold text-[var(--text)] m-0">Kişisel Bilgiler</h3>
                 <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Kişisel bilgilerinizi ve avatarınızı güncelleyin.</p>
             </div>
-            <span class="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-[10px] font-bold uppercase tracking-widest border border-primary/20"><?= e($roleLabel) ?></span>
         </div>
 
-        <form method="post" enctype="multipart/form-data" autocomplete="off" class="m-0">
+        <form method="post" enctype="multipart/form-data" autocomplete="off" class="m-0" id="profile-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="profile">
+            <input type="hidden" name="remove_photo" id="removePhotoFlag" value="0">
 
-            <div class="flex flex-col md:flex-row gap-6 items-center">
-                <div class="flex flex-col items-center gap-2">
-                    <div class="relative">
-                        <div class="w-24 h-24 rounded-full ring-4 ring-primary/10 overflow-hidden flex items-center justify-center">
-                            <?php if (!empty($me['photo'])): ?>
-                                <img class="w-full h-full object-cover" id="avatarPreview" src="uploads/<?= e($me['photo']) ?>">
-                            <?php else: ?>
-                                <div class="w-full h-full bg-primary text-white flex items-center justify-center font-bold text-3xl" id="avatarPreviewInitials">
-                                    <?= e($initials) ?>
-                                </div>
-                            <?php endif; ?>
+            <!-- Profil Fotoğrafı ve Yanındaki Başlık/Rol -->
+            <div class="flex items-center gap-6 mb-6">
+                <!-- Dairesel Profil Resmi -->
+                <div class="relative w-32 h-32 rounded-full overflow-hidden bg-[var(--hover)] border-4 border-primary/10 cursor-pointer flex-none transition-all duration-300 hover:ring-4 hover:ring-primary/20" onclick="document.getElementById('photoInput').click();" title="Fotoğraf Seçmek İçin Tıklayın">
+                    <?php if (!empty($me['photo'])): ?>
+                        <img class="w-full h-full object-cover" id="avatarPreview" src="uploads/<?= e($me['photo']) ?>">
+                    <?php else: ?>
+                        <div class="w-full h-full bg-primary text-white flex items-center justify-center font-bold text-4xl" id="avatarPreviewInitials">
+                            <?= e($initials) ?>
                         </div>
+                    <?php endif; ?>
+                </div>
+                <input type="file" name="photo" id="photoInput" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="this.form.submit()">
+
+                <!-- İsim ve Rol -->
+                <div class="flex-1 min-w-0" style="display: flex; flex-direction: column; gap: 4px;">
+                    <h4 class="font-black text-[var(--text)] m-0 leading-tight tracking-tight break-words" style="font-size: 26px;"><?= e($me['full_name']) ?></h4>
+                    <p class="text-[12px] text-[var(--primary)] font-extrabold uppercase tracking-widest m-0 break-words"><?= e($roleLabel) ?></p>
+                    <div class="flex items-center gap-3 mt-1">
+                        <button type="button" onclick="document.getElementById('photoInput').click();" class="text-[12px] font-semibold text-[var(--primary)] hover:underline bg-transparent border-none cursor-pointer p-0">Fotoğrafı Değiştir</button>
+                        <?php if (!empty($me['photo'])): ?>
+                            <span class="text-[var(--text-2)]">·</span>
+                            <button type="button" onclick="if(confirm('Profil fotoğrafınız kaldırılsın mı?')){document.getElementById('removePhotoFlag').value='1'; document.getElementById('profile-form').submit();}" class="text-[12px] font-semibold text-[var(--danger)] hover:underline bg-transparent border-none cursor-pointer p-0">Fotoğrafı Kaldır</button>
+                        <?php endif; ?>
                     </div>
-                    <button type="button" onclick="document.getElementById('photoInput').click();" class="hover:underline bg-none border-none cursor-pointer mt-1" style="background:none; border:none; padding:0; outline:none; cursor:pointer; color:var(--primary); font-weight:600; font-size:12px;">Fotoğraf Yükle</button>
-                    <input type="file" name="photo" id="photoInput" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="this.form.submit()">
+                </div>
+            </div>
+            
+            <!-- Alt Satır: Tek Sütun Halinde Sıralı Form Girdileri (Sıkı ve Alt Alta) -->
+            <div class="w-full settings-input-group" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="margin: 0;">
+                    <label>Tam Ad</label>
+                    <input type="text" name="full_name" required value="<?= e($me['full_name']) ?>" class="w-full">
+                </div>
+                <div style="margin: 0;">
+                    <label>Çalıştığı Birim / Daire Başkanlığı</label>
+                    <input type="text" name="department" list="settings_dept_list" value="<?= e($me['department'] ?? '') ?>" placeholder="örn. Bilgi İşlem Daire Başkanlığı" class="w-full">
+                    <datalist id="settings_dept_list">
+                        <?php 
+                        $depts = db()->query('SELECT DISTINCT department_name FROM department_quotas ORDER BY department_name ASC')->fetchAll(PDO::FETCH_COLUMN);
+                        foreach ($depts as $d): ?>
+                            <option value="<?= e($d) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+                <div style="margin: 0;">
+                    <label>E-posta Adresi</label>
+                    <input type="email" name="email" value="<?= e($me['email']) ?>" placeholder="örn. isim@mail.com" class="w-full">
+                </div>
+                <div style="margin: 0;">
+                    <label>Telefon Numarası</label>
+                    <input type="text" name="phone" value="<?= e($me['phone'] ?? '') ?>" placeholder="örn. 0555 555 5555" class="w-full">
+                </div>
+                <div style="margin: 0;">
+                    <label>Doğum Tarihi</label>
+                    <input type="text" name="birth_date" value="<?= e($me['birth_date'] ?? '') ?>" placeholder="GG.AA.YYYY" class="w-full">
+                </div>
+                <div style="margin: 0;">
+                    <label>Adres</label>
+                    <input type="text" name="address" value="<?= e($me['address'] ?? '') ?>" placeholder="Ev veya iş adresi" class="w-full">
                 </div>
                 
-                <div class="flex-1 space-y-4 settings-input-group">
-                    <div>
-                        <label>Tam Ad</label>
-                        <input type="text" name="full_name" required value="<?= e($me['full_name']) ?>">
-                    </div>
-                    <div>
-                        <label>E-posta Adresi</label>
-                        <input type="email" name="email" value="<?= e($me['email']) ?>" placeholder="örn. isim@mail.com">
-                    </div>
-                    <div class="pt-2 flex justify-end">
-                        <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg font-semibold text-xs shadow-sm hover:shadow-primary/10 transition-all active:scale-95 border-none cursor-pointer">Güncelle</button>
-                    </div>
+                <div class="pt-2 flex justify-end" style="margin: 0;">
+                    <button type="submit" id="profileSaveBtn" disabled class="px-6 py-2 bg-primary text-white rounded-lg font-bold text-xs shadow-sm hover:shadow-primary/10 transition-all active:scale-95 border-none cursor-pointer">Değişiklikleri Kaydet</button>
                 </div>
             </div>
         </form>
     </section>
 
     <!-- Theme Preference Section -->
-    <section class="lg:col-span-6 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 shadow-[0_4px_16px_rgba(15,23,42,0.03)]">
+    <section class="lg:col-span-6 card">
         <h3 class="text-base font-bold text-[var(--text)] m-0 mb-1">Tema Tercihi</h3>
         <p class="text-xs text-[var(--text-2)] m-0 mb-6">Uygulama görünümünü çalışma ortamınıza göre özelleştirin.</p>
         
-        <!-- Tema listesi: 2x2 Izgara şeklinde 4 kutu olarak hizalanır -->
-        <div class="grid grid-cols-2 gap-3">
+        <!-- Tema listesi: 3x2 Izgara şeklinde 6 kutu olarak hizalanır -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             <?php foreach ($availableThemes as $themeKey => $tInfo): ?>
-                <div class="theme-card relative cursor-pointer group border rounded-xl overflow-hidden transition-all border-[var(--input-border)] hover:border-primary" data-theme-id="<?= e($themeKey) ?>">
-                    <div class="h-16 relative overflow-hidden <?= e($tInfo['preview_bg']) ?>">
+                <?php $isComingSoon = !empty($tInfo['coming_soon']); ?>
+                <div class="theme-card relative <?= $isComingSoon ? 'cursor-not-allowed opacity-70' : 'cursor-pointer' ?> group border rounded-xl overflow-hidden transition-all border-[#d1d5db] dark:border-neutral-700 hover:border-primary shadow-md" data-theme-id="<?= e($themeKey) ?>" data-coming-soon="<?= $isComingSoon ? '1' : '0' ?>">
+                    <div class="h-10 relative overflow-hidden <?= e($tInfo['preview_bg']) ?>">
                         <?= $tInfo['preview_elements'] ?>
                     </div>
-                    <div class="p-3 flex items-center justify-between bg-[var(--card-bg)] text-[var(--text)] border-t border-[var(--card-border)]">
-                        <div>
-                            <p class="font-bold text-xs m-0"><?= e($tInfo['name']) ?></p>
-                            <p class="text-[10px] m-0 mt-0.5 text-[var(--text-2)]"><?= e($tInfo['desc']) ?></p>
+                    <div class="p-2 flex items-center justify-between bg-[var(--card-bg)] text-[var(--text)] border-t border-[#d1d5db] dark:border-neutral-700">
+                        <div class="min-w-0">
+                            <p class="font-bold text-[11px] m-0 truncate"><?= e($tInfo['name']) ?></p>
+                            <p class="text-[9px] m-0 mt-0.5 text-[var(--text-2)] truncate"><?= e($tInfo['desc']) ?></p>
                         </div>
-                        <span class="ms text-primary theme-check-icon hidden" style="font-variation-settings: 'FILL' 1; font-size:16px;">check_circle</span>
+                        <span class="ms text-primary theme-check-icon <?= $isComingSoon ? 'hidden' : 'hidden' ?>" style="font-variation-settings: 'FILL' 1; font-size:14px; flex:none;">check_circle</span>
                     </div>
                 </div>
             <?php endforeach; ?>
+        </div>
 
-            <!-- Boş Tema Kutusu 1 (Gelecekte eklenecek temalar için) -->
-            <div class="border border-dashed border-[var(--input-border)] rounded-xl flex flex-col justify-center items-center p-3 opacity-60 bg-[var(--hover)] hover:opacity-80 transition-all min-h-[110px]" style="cursor: default;">
-                <span class="ms text-[var(--text-2)] mb-1" style="font-size: 20px;">add_circle_outline</span>
-                <b class="text-xs text-[var(--text)]">Yeni Tema</b>
-                <span class="text-[10px] text-[var(--text-2)]">Çok Yakında</span>
-            </div>
-
-            <!-- Boş Tema Kutusu 2 (Gelecekte eklenecek temalar için) -->
-            <div class="border border-dashed border-[var(--input-border)] rounded-xl flex flex-col justify-center items-center p-3 opacity-60 bg-[var(--hover)] hover:opacity-80 transition-all min-h-[110px]" style="cursor: default;">
-                <span class="ms text-[var(--text-2)] mb-1" style="font-size: 20px;">add_circle_outline</span>
-                <b class="text-xs text-[var(--text)]">Yeni Tema</b>
-                <span class="text-[10px] text-[var(--text-2)]">Çok Yakında</span>
+        <!-- Arka Plan Görseli Seçimi -->
+        <div class="mt-8 border-t border-[var(--card-border)] pt-6">
+            <h4 class="text-sm font-bold text-[var(--text)] m-0 mb-1">Arka Plan Görseli</h4>
+            <p class="text-[11px] text-[var(--text-2)] m-0 mb-6">Seçilen temaya özel bir arka plan resmi belirleyin veya düz renk kullanın.</p>
+            
+            <div class="grid grid-cols-4 gap-4" id="bg-selector-grid">
+                <!-- Düz Renk Kartı -->
+                <div class="bg-card cursor-pointer border rounded-lg overflow-hidden transition-all hover:border-primary relative flex flex-col justify-between" data-bg-id="none">
+                    <div class="h-12 bg-[var(--bg)] flex items-center justify-center text-[var(--text-2)] text-[10px]">
+                        <span class="ms text-lg">format_color_fill</span>
+                    </div>
+                    <div class="p-2 bg-[var(--card-bg)] border-t border-[var(--card-border)] text-center">
+                        <span class="font-bold text-[9px] text-[var(--text)] block truncate">Düz Renk</span>
+                    </div>
+                    <span class="ms text-primary bg-white rounded-full absolute top-1 right-1 bg-clip-padding hidden bg-check-icon" style="font-variation-settings: 'FILL' 1; font-size:12px; line-height: 1;">check_circle</span>
+                </div>
+                
+                <!-- 1'den 7'ye Arka Plan Kartları -->
+                <?php for ($i = 1; $i <= 7; $i++): ?>
+                    <div class="bg-card cursor-pointer border rounded-lg overflow-hidden transition-all hover:border-primary relative flex flex-col justify-between" data-bg-id="<?= $i ?>">
+                        <div class="h-12 bg-cover bg-center bg-no-repeat bg-preview-box" data-bg-num="<?= $i ?>">
+                        </div>
+                        <div class="p-2 bg-[var(--card-bg)] border-t border-[var(--card-border)] text-center">
+                            <span class="font-bold text-[9px] text-[var(--text)] block">Arka Plan <?= $i ?></span>
+                        </div>
+                        <span class="ms text-primary bg-white rounded-full absolute top-1 right-1 bg-clip-padding hidden bg-check-icon" style="font-variation-settings: 'FILL' 1; font-size:12px; line-height: 1;">check_circle</span>
+                    </div>
+                <?php endfor; ?>
             </div>
         </div>
     </section>
 
     <!-- Account Security Section -->
-    <section class="lg:col-span-6 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 shadow-[0_4px_16px_rgba(15,23,42,0.03)]">
-        <div class="flex items-center gap-2 mb-6">
-            <span class="ms text-primary bg-primary/10 p-1.5 rounded-lg" style="font-size:18px;">security</span>
-            <div>
-                <h3 class="text-base font-bold text-[var(--text)] m-0">Hesap Güvenliği</h3>
-                <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Şifre ve oturum güvenliğinizi sağlayın.</p>
-            </div>
+    <section class="lg:col-span-6 card">
+        <div class="mb-6">
+            <h3 class="text-base font-bold text-[var(--text)] m-0">Hesap Güvenliği</h3>
+            <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Şifre ve oturum güvenliğinizi sağlayın.</p>
         </div>
 
-        <form method="post" autocomplete="off" class="m-0 space-y-4 settings-input-group">
+        <form method="post" autocomplete="off" class="m-0 space-y-4 settings-input-group" id="password-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="password">
 
@@ -379,7 +573,7 @@ render_header('Ayarlar', 'settings');
                     <input type="password" name="confirm_password" required minlength="8" placeholder="Tekrar girin">
                 </div>
             </div>
-            <button type="submit" class="w-full py-2.5 bg-primary text-white rounded-lg font-bold text-xs shadow-sm hover:shadow-primary/10 transition-all flex items-center justify-center gap-2 border-none cursor-pointer">
+            <button type="submit" class="w-full py-2.5 bg-primary text-white rounded-lg font-bold text-xs shadow-sm hover:shadow-primary/10 transition-all flex items-center justify-center gap-2 border-none cursor-pointer" style="margin-top: 24px !important;">
                 <span class="ms text-[16px]">key</span>
                 Şifreyi Güncelle
             </button>
@@ -387,13 +581,10 @@ render_header('Ayarlar', 'settings');
     </section>
 
     <!-- Notification Settings Section -->
-    <section class="lg:col-span-6 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-5 shadow-[0_4px_16px_rgba(15,23,42,0.03)]">
-        <div class="flex items-center gap-2 mb-6">
-            <span class="ms text-primary bg-primary/10 p-1.5 rounded-lg" style="font-size:18px;">notifications_active</span>
-            <div>
-                <h3 class="text-base font-bold text-[var(--text)] m-0">Bildirim Ayarları</h3>
-                <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Hangi olaylardan haberdar olmak istediğinizi seçin.</p>
-            </div>
+    <section class="lg:col-span-6 card">
+        <div class="mb-6">
+            <h3 class="text-base font-bold text-[var(--text)] m-0">Bildirim Ayarları</h3>
+            <p class="text-xs text-[var(--text-2)] m-0 mt-0.5">Hangi olaylardan haberdar olmak istediğinizi seçin.</p>
         </div>
         
         <div class="space-y-4">
@@ -442,12 +633,36 @@ render_header('Ayarlar', 'settings');
             var cardTheme = card.dataset.themeId;
             var checkIcon = card.querySelector('.theme-check-icon');
             if (cardTheme === activeTheme) {
-                card.classList.remove('border-[var(--input-border)]');
-                card.classList.add('border-primary', 'shadow-md');
+                card.classList.remove('border-[#d1d5db]', 'dark:border-neutral-700');
+                card.classList.add('border-primary');
                 if (checkIcon) checkIcon.classList.remove('hidden');
             } else {
-                card.classList.remove('border-primary', 'shadow-md');
-                card.classList.add('border-[var(--input-border)]');
+                card.classList.remove('border-primary');
+                card.classList.add('border-[#d1d5db]', 'dark:border-neutral-700');
+                if (checkIcon) checkIcon.classList.add('hidden');
+            }
+        });
+    }
+
+    function updateBackgroundPreviews(activeTheme) {
+        document.querySelectorAll('.bg-preview-box').forEach(function (box) {
+            var bgNum = box.dataset.bgNum;
+            box.style.backgroundImage = 'url("assets/img/backgrounds/' + activeTheme + '_' + bgNum + '.png")';
+        });
+    }
+
+    function syncActiveBackground() {
+        var activeBg = localStorage.getItem("theme-bg") || "none";
+        document.querySelectorAll('.bg-card').forEach(function (card) {
+            var cardBg = card.dataset.bgId;
+            var checkIcon = card.querySelector('.bg-check-icon');
+            if (cardBg === activeBg) {
+                card.classList.remove('border-[#d1d5db]', 'dark:border-neutral-700');
+                card.classList.add('border-primary');
+                if (checkIcon) checkIcon.classList.remove('hidden');
+            } else {
+                card.classList.remove('border-primary');
+                card.classList.add('border-[#d1d5db]', 'dark:border-neutral-700');
                 if (checkIcon) checkIcon.classList.add('hidden');
             }
         });
@@ -455,14 +670,83 @@ render_header('Ayarlar', 'settings');
 
     document.querySelectorAll('.theme-card').forEach(function (card) {
         card.addEventListener('click', function () {
+            // "Yakında" teması pasif — tıklama kabul edilmez
+            if (card.dataset.comingSoon === '1') {
+                return;
+            }
             var selectedTheme = card.dataset.themeId;
             document.documentElement.dataset.theme = selectedTheme;
+            // Kullanıcı özel bir tema seçti, artık default hatırlanmasın
             localStorage.setItem('theme', selectedTheme);
+            localStorage.setItem('theme-explicit', '1');
             syncActiveTheme();
+            updateBackgroundPreviews(selectedTheme);
+            
+            // Seçili arka plan varsa gövdeyi güncelle
+            var activeBg = localStorage.getItem("theme-bg") || "none";
+            var existingStyle = document.getElementById('dynamic-bg-style');
+            if (existingStyle) {
+                existingStyle.remove();
+            }
+            if (activeBg !== "none") {
+                document.documentElement.classList.add("has-custom-bg");
+                var overlay = "rgba(9, 19, 36, 0.55)";
+                if (selectedTheme === "light") overlay = "rgba(247, 249, 251, 0.45)";
+                else if (selectedTheme === "ocean") overlay = "rgba(15, 13, 54, 0.35)";
+                else if (selectedTheme === "rose") overlay = "rgba(255, 240, 245, 0.45)";
+                else if (selectedTheme === "corporate") overlay = "rgba(13, 25, 52, 0.40)";
+                var css = 'body { background: linear-gradient(' + overlay + ', ' + overlay + '), url("assets/img/backgrounds/' + selectedTheme + '_' + activeBg + '.png") !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important; }';
+                var style = document.createElement('style');
+                style.id = 'dynamic-bg-style';
+                style.type = 'text/css';
+                style.appendChild(document.createTextNode(css));
+                document.head.appendChild(style);
+            } else {
+                document.documentElement.classList.remove("has-custom-bg");
+            }
         });
     });
 
+    document.querySelectorAll('.bg-card').forEach(function (card) {
+        card.addEventListener('click', function () {
+            var selectedBg = card.dataset.bgId;
+            localStorage.setItem('theme-bg', selectedBg);
+            syncActiveBackground();
+            
+            var activeTheme = document.documentElement.dataset.theme || 'dark';
+            var existingStyle = document.getElementById('dynamic-bg-style');
+            if (existingStyle) {
+                existingStyle.remove();
+            }
+            if (selectedBg !== "none") {
+                document.documentElement.classList.add("has-custom-bg");
+                var overlay = "rgba(9, 19, 36, 0.55)";
+                if (activeTheme === "light") overlay = "rgba(247, 249, 251, 0.45)";
+                else if (activeTheme === "ocean") overlay = "rgba(15, 13, 54, 0.35)";
+                else if (activeTheme === "rose") overlay = "rgba(255, 240, 245, 0.45)";
+                else if (activeTheme === "corporate") overlay = "rgba(13, 25, 52, 0.40)";
+                var css = 'body { background: linear-gradient(' + overlay + ', ' + overlay + '), url("assets/img/backgrounds/' + activeTheme + '_' + selectedBg + '.png") !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important; }';
+                var style = document.createElement('style');
+                style.id = 'dynamic-bg-style';
+                style.type = 'text/css';
+                style.appendChild(document.createTextNode(css));
+                document.head.appendChild(style);
+            } else {
+                document.documentElement.classList.remove("has-custom-bg");
+            }
+        });
+    });
+
+    var initialTheme = document.documentElement.dataset.theme || 'dark';
+    var initialBg = localStorage.getItem("theme-bg") || "none";
+    if (initialBg !== "none") {
+        document.documentElement.classList.add("has-custom-bg");
+    } else {
+        document.documentElement.classList.remove("has-custom-bg");
+    }
     syncActiveTheme();
+    updateBackgroundPreviews(initialTheme);
+    syncActiveBackground();
 
     // Şifre görünürlük toggle
     var toggleBtn = document.getElementById('toggleCurrentPassword');
@@ -522,6 +806,32 @@ render_header('Ayarlar', 'settings');
             });
         }
     });
+
+    // Profile form dirty check to enable/disable Save button
+    var profileForm = document.getElementById('profile-form');
+    var profileSaveBtn = document.getElementById('profileSaveBtn');
+    if (profileForm && profileSaveBtn) {
+        var profileInputs = profileForm.querySelectorAll('input[type="text"], input[type="email"]');
+        var originalValues = {};
+        profileInputs.forEach(function (input) {
+            originalValues[input.name] = input.value;
+        });
+
+        var checkChanges = function () {
+            var changed = false;
+            profileInputs.forEach(function (input) {
+                if (input.value !== originalValues[input.name]) {
+                    changed = true;
+                }
+            });
+            profileSaveBtn.disabled = !changed;
+        };
+
+        profileInputs.forEach(function (input) {
+            input.addEventListener('input', checkChanges);
+            input.addEventListener('change', checkChanges);
+        });
+    }
 })();
 </script>
 

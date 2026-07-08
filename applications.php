@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-// Sistem yöneticisi veya Kurum Staj Sorumlusu bu sayfaya erişebilir
+// Sistem Yöneticisi (gözetim) ve Kurum Staj Sorumlusu (İK - evrak onayı/koordinasyon) erişebilir
 require_role(['sistem_yoneticisi', 'kurum_staj_sorumlusu']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -12,8 +12,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'reject') {
         $appId = (int) ($_POST['app_id'] ?? 0);
+        $appRow = db()->prepare('SELECT first_name, last_name FROM applications WHERE id = ?');
+        $appRow->execute([$appId]);
+        $ar = $appRow->fetch();
+        $appName = $ar ? ($ar['first_name'] . ' ' . $ar['last_name']) : ('ID: ' . $appId);
         db()->prepare('UPDATE applications SET status = \'reddedildi\' WHERE id = ?')->execute([$appId]);
-        log_action('basvuru_red', 'Başvuru ID: ' . $appId);
+        log_action('basvuru_red', 'Başvuru reddedildi: ' . $appName);
         flash_set('success', 'Staj başvurusu reddedildi.');
     }
 
@@ -58,12 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Create intern record
                 db()->prepare('
-                    INSERT INTO interns (first_name, last_name, department, school, level, phone, address, start_date, end_date, mentor_id, photo, note)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO interns (first_name, last_name, department, school, level, type, phone, address, start_date, end_date, mentor_id, photo, note, assigned_department)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ')->execute([
-                    $app['first_name'], $app['last_name'], $quota['department_name'], $app['school'], $app['level'],
+                    $app['first_name'], $app['last_name'], $app['department'], $app['school'], $app['level'], $app['type'],
                     $app['phone'], $app['address'], $period['start_date'], $period['end_date'],
-                    $mentorId ?: null, $app['photo'], 'Online başvuru onaylandı. Başvuru ID: ' . $appId
+                    $mentorId ?: null, $app['photo'], 'Online başvuru onaylandı. Başvuru ID: ' . $appId,
+                    $quota['department_name']
                 ]);
 
                 // Log the action
@@ -103,31 +108,33 @@ $quotas = db()->query('
 // Calculate remaining quotas dynamically
 $quotaOptions = [];
 foreach ($quotas as $q) {
-    // Count existing interns for this department, level and period dates
-    $stmt = db()->prepare('
-        SELECT COUNT(*) 
-        FROM interns 
-        WHERE department = ? AND level = ? 
-          AND start_date >= ? AND end_date <= ?
-    ');
-    $stmt->execute([$q['department_name'], $q['level'], $q['start_date'], $q['end_date']]);
-    $filled = (int) $stmt->fetchColumn();
+    foreach (['lise', 'onlisans', 'lisans'] as $lvl) {
+        // Count existing interns for this department, level and period dates
+        $stmt = db()->prepare('
+            SELECT COUNT(*) 
+            FROM interns 
+            WHERE department = ? AND level = ? 
+              AND start_date >= ? AND end_date <= ?
+        ');
+        $stmt->execute([$q['department_name'], $lvl, $q['start_date'], $q['end_date']]);
+        $filled = (int) $stmt->fetchColumn();
 
-    $limit = 0;
-    if ($q['level'] === 'lise') $limit = $q['lise_quota'];
-    elseif ($q['level'] === 'onlisans') $limit = $q['onlisans_quota'];
-    elseif ($q['level'] === 'lisans') $limit = $q['lisans_quota'];
+        $limit = 0;
+        if ($lvl === 'lise') $limit = $q['lise_quota'];
+        elseif ($lvl === 'onlisans') $limit = $q['onlisans_quota'];
+        elseif ($lvl === 'lisans') $limit = $q['lisans_quota'];
 
-    $remaining = max(0, $limit - $filled);
-    $quotaOptions[] = [
-        'id' => $q['id'],
-        'period_id' => $q['period_id'],
-        'department_name' => $q['department_name'],
-        'level' => $q['level'],
-        'remaining' => $remaining,
-        'limit' => $limit,
-        'label' => $q['department_name'] . ' (' . ucfirst($q['level']) . ') — Kalan: ' . $remaining . '/' . $limit
-    ];
+        $remaining = max(0, $limit - $filled);
+        $quotaOptions[] = [
+            'id' => $q['id'],
+            'period_id' => $q['period_id'],
+            'department_name' => $q['department_name'],
+            'level' => $lvl,
+            'remaining' => $remaining,
+            'limit' => $limit,
+            'label' => $q['department_name'] . ' (' . ucfirst($lvl) . ') — Kalan: ' . $remaining . '/' . $limit
+        ];
+    }
 }
 
 render_header('Başvuru Kabul Modülü', 'applications');

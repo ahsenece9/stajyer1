@@ -26,13 +26,34 @@ if (!$intern) {
     redirect('index.php');
 }
 
-if (is_mentor() && (int) $intern['mentor_id'] !== (int) $_SESSION['user_id']) {
+if (is_mentor() && trim(mb_strtolower((string)($intern['assigned_department'] ?? ''))) !== trim(mb_strtolower($_SESSION['user_department'] ?? ''))) {
     flash_set('error', 'Bu stajyerin bilgilerini görüntüleme yetkiniz bulunmamaktadır.');
     redirect('index.php');
 }
 
 $fullName = $intern['first_name'] . ' ' . $intern['last_name'];
 $upgradeNeeded = false;
+
+// Geçmiş stajlar: aynı TC'ye ait diğer staj kayıtları (bu kayıt hariç).
+// Her kayıt için ortalama değerlendirme puanı ve staj döneminin adı da getirilir.
+$pastInternships = [];
+if (!empty($intern['tc_no'])) {
+    try {
+        $piStmt = db()->prepare(
+            'SELECT i.*,
+                    (SELECT ROUND(AVG(e.score),1) FROM evaluations e WHERE e.intern_id = i.id AND e.score IS NOT NULL) AS avg_score,
+                    (SELECT COUNT(*) FROM evaluations e WHERE e.intern_id = i.id) AS eval_count,
+                    (SELECT p.name FROM internship_periods p WHERE p.start_date = i.start_date AND p.end_date = i.end_date LIMIT 1) AS period_name
+             FROM interns i
+             WHERE i.tc_no = ? AND i.id <> ?
+             ORDER BY i.start_date DESC'
+        );
+        $piStmt->execute([$intern['tc_no'], $id]);
+        $pastInternships = $piStmt->fetchAll();
+    } catch (PDOException) {
+        $pastInternships = [];
+    }
+}
 
 /* ---------- Form işlemleri (not / belge / değerlendirme) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -108,25 +129,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'eval_save') {
-            $week    = (string) ($_POST['week_start'] ?? '');
-            $score   = (int) ($_POST['score'] ?? 0);
-            $task    = trim((string) ($_POST['task'] ?? ''));
-            $comment = trim((string) ($_POST['comment'] ?? ''));
+            $week = (string) ($_POST['week_start'] ?? '');
             $validWeeks = array_column(intern_weeks($intern), 'start');
 
             if (!in_array($week, $validWeeks, true)) {
                 flash_set('error', 'Geçersiz hafta seçimi.');
-            } elseif ($score < 1 && $task === '' && $comment === '') {
-                flash_set('error', 'Değerlendirme için en az bir alan doldurun.');
             } else {
-                db()->prepare(
-                    'INSERT INTO evaluations (intern_id, week_start, score, task, comment, user_name)
-                     VALUES (?, ?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE score = VALUES(score), task = VALUES(task),
-                                             comment = VALUES(comment), user_name = VALUES(user_name)'
-                )->execute([$id, $week, $score >= 1 && $score <= 10 ? $score : null, $task, $comment, (string) $_SESSION['user_name']]);
-                log_action('degerlendirme', $fullName . ' — ' . format_date($week) . ' haftası');
-                flash_set('success', 'Haftalık değerlendirme kaydedildi.');
+                $stmt = db()->prepare('SELECT * FROM evaluations WHERE intern_id = ? AND week_start = ?');
+                $stmt->execute([$id, $week]);
+                $existing = $stmt->fetch();
+
+                if (isset($_POST['score'])) {
+                    $score = (int) $_POST['score'];
+                } else {
+                    $score = $existing ? (int) $existing['score'] : 0;
+                }
+
+                if (isset($_POST['comment'])) {
+                    $comment = trim((string) $_POST['comment']);
+                } else {
+                    $comment = $existing ? (string) $existing['comment'] : '';
+                }
+
+                if (isset($_POST['task'])) {
+                    $task = trim((string) $_POST['task']);
+                } else {
+                    $task = $existing ? (string) $existing['task'] : '';
+                }
+
+                if ($score < 1 && $task === '' && $comment === '') {
+                    flash_set('error', 'Değerlendirme için en az bir alan doldurun.');
+                } else {
+                    db()->prepare(
+                        'INSERT INTO evaluations (intern_id, week_start, score, task, comment, user_name)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE score = ?, task = ?, comment = ?, user_name = ?'
+                    )->execute([
+                        $id,
+                        $week,
+                        $score >= 1 && $score <= 10 ? $score : null,
+                        $task,
+                        $comment,
+                        (string) $_SESSION['user_name'],
+                        $score >= 1 && $score <= 10 ? $score : null,
+                        $task,
+                        $comment,
+                        (string) $_SESSION['user_name']
+                    ]);
+                    log_action('degerlendirme', $fullName . ' — ' . format_date($week) . ' haftası');
+                    flash_set('success', 'Haftalık görev/değerlendirme kaydedildi.');
+                }
             }
         }
 
@@ -184,7 +236,29 @@ foreach ($attMap as $dt => $st) {
     elseif ($st === 'izinli') { $cntIzin++; if ($dt <= $todayStr) $cntIzinPast++; }
     elseif ($st === 'raporlu') { $cntRapor++; if ($dt <= $todayStr) $cntRaporPast++; }
 }
-$cntGeldi = max(0, $pastWorkdays - $cntDevPast - $cntIzinPast - $cntRaporPast);
+$cntGeldi = 0;
+try {
+    $startD = new DateTimeImmutable($intern['start_date']);
+    $limitD = new DateTimeImmutable($intern['end_date']);
+    $limitD = $limitD < $todayD ? $limitD : $todayD;
+    for ($d = $startD; $d <= $limitD; $d = $d->modify('+1 day')) {
+        $dStr = $d->format('Y-m-d');
+        if ((int) $d->format('N') <= 5 && !is_turkish_holiday($dStr)) {
+            $status = $attMap[$dStr] ?? '';
+            if ($dStr === $todayStr) {
+                if ($status === 'geldi') {
+                    $cntGeldi++;
+                }
+            } else {
+                if ($status !== 'devamsiz' && $status !== 'izinli' && $status !== 'raporlu') {
+                    $cntGeldi++;
+                }
+            }
+        }
+    }
+} catch (Exception) {
+    $cntGeldi = 0;
+}
 
 $monthNames = [1 => 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
                'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -265,18 +339,18 @@ if (isset($_GET['ajax_get_docs'])) {
         foreach (array_slice($docs, 0, 4) as $d) {
             echo '
             <div class="doc-item">
-                <span class="info-icon" style="width:38px;height:38px;"><span class="ms">description</span></span>
+                <span class="info-icon" style="width:38px;height:38px;"><span class="ms">' . svg_icon('description') . '</span></span>
                 <div style="flex:1; min-width:0;">
                     <b style="font-size:13.5px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' . e($d['orig_name']) . '</b>
                     <span class="row-sub">' . number_format($d['filesize'] / 1024, 0, ',', '.') . ' KB · ' . e(date('d.m.Y', strtotime($d['created_at']))) . '</span>
                 </div>
-                <a class="btn-icon" href="download.php?id=' . (int) $d['id'] . '" title="İndir"><span class="ms">download</span></a>
+                <a class="btn-icon" href="download.php?id=' . (int) $d['id'] . '" title="İndir"><span class="ms">' . svg_icon('download') . '</span></a>
                 <form method="post" style="margin:0;" onsubmit="return confirm(\'Bu belge kalıcı olarak silinecek. Emin misiniz?\');">' .
                     csrf_field() . '
                     <input type="hidden" name="action" value="doc_delete">
                     <input type="hidden" name="intern_id" value="' . $id . '">
                     <input type="hidden" name="doc_id" value="' . (int) $d['id'] . '">
-                    <button type="submit" class="btn-icon danger" title="Sil"><span class="ms">delete</span></button>
+                    <button type="submit" class="btn-icon danger" title="Sil"><span class="ms">' . svg_icon('delete') . '</span></button>
                 </form>
             </div>';
         }
@@ -361,20 +435,20 @@ if ($upgradeNeeded) {
                 </p>
 
                 <div class="info-row">
-                    <span class="info-icon"><span class="ms">fingerprint</span></span>
+                    <span class="info-icon"><span class="ms"><?= svg_icon('fingerprint') ?></span></span>
                     <div><div class="k">T.C. Kimlik No</div><div class="v"><?= e($intern['tc_no'] ?: '-') ?></div></div>
                 </div>
                 <div class="info-row">
-                    <span class="info-icon"><span class="ms">phone</span></span>
+                    <span class="info-icon"><span class="ms"><?= svg_icon('phone') ?></span></span>
                     <div><div class="k">Telefon</div><div class="v"><?= e($intern['phone']) ?></div></div>
                 </div>
                 <div class="info-row">
-                    <span class="info-icon"><span class="ms">home</span></span>
+                    <span class="info-icon"><span class="ms"><?= svg_icon('home') ?></span></span>
                     <div><div class="k">Adres</div>
                         <div class="v"><?= $intern['address'] !== '' ? nl2br(e($intern['address'])) : '-' ?></div></div>
                 </div>
                 <div class="info-row">
-                    <span class="info-icon"><span class="ms">emergency</span></span>
+                    <span class="info-icon"><span class="ms"><?= svg_icon('emergency') ?></span></span>
                     <div><div class="k">Acil Durum Kişisi</div>
                         <div class="v">
                             <?php if ($intern['emergency_name'] !== ''): ?>
@@ -385,7 +459,17 @@ if ($upgradeNeeded) {
                         </div></div>
                 </div>
                 <div class="info-row">
-                    <span class="info-icon"><span class="ms">manage_accounts</span></span>
+                    <span class="info-icon"><span class="ms"><?= svg_icon('history_edu') ?></span></span>
+                    <div><div class="k">Staj Türü</div>
+                        <div class="v"><?= ($intern['type'] ?? 'zorunlu') === 'gonullu' ? 'Gönüllü' : 'Zorunlu' ?></div></div>
+                </div>
+                <div class="info-row">
+                    <span class="info-icon"><span class="ms"><?= svg_icon('corporate_fare') ?></span></span>
+                    <div><div class="k">Staj Yaptığı Birim</div>
+                        <div class="v"><?= !empty($intern['assigned_department']) ? e($intern['assigned_department']) : '<span class="muted">Birim Atanmadı</span>' ?></div></div>
+                </div>
+                <div class="info-row">
+                    <span class="info-icon"><span class="ms"><?= svg_icon('manage_accounts') ?></span></span>
                     <div><div class="k">Sorumlu Yetkili</div>
                         <div class="v"><?= $mentorName !== null ? e($mentorName) : '<span class="muted">Atanmadı</span>' ?></div></div>
                 </div>
@@ -419,9 +503,9 @@ if ($upgradeNeeded) {
                     <p class="muted" style="margin:4px 0 0; font-size:13px;">Aylık devam durumu takibi</p>
                 </div>
                 <div class="cal-month-header" style="display:flex; align-items:center; gap:0; border:1px solid var(--card-border); border-radius:10px; background:var(--input-bg); overflow:hidden; height:38px;">
-                    <button type="button" class="btn-icon" id="calPrevBtn" style="border:none; border-right:1px solid var(--card-border); border-radius:0; width:36px; height:100%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;" title="Önceki Ay"><span class="ms">chevron_left</span></button>
+                    <button type="button" class="btn-icon" id="calPrevBtn" style="border:none; border-right:1px solid var(--card-border); border-radius:0; width:36px; height:100%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;" title="Önceki Ay"><span class="ms"><?= svg_icon('chevron_left') ?></span></button>
                     <span id="calMonthTitle" style="font-size:14px; font-weight:700; color:var(--text); padding:0 20px; min-width:140px; text-align:center;">-</span>
-                    <button type="button" class="btn-icon" id="calNextBtn" style="border:none; border-left:1px solid var(--card-border); border-radius:0; width:36px; height:100%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;" title="Sonraki Ay"><span class="ms">chevron_right</span></button>
+                    <button type="button" class="btn-icon" id="calNextBtn" style="border:none; border-left:1px solid var(--card-border); border-radius:0; width:36px; height:100%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;" title="Sonraki Ay"><span class="ms"><?= svg_icon('chevron_right') ?></span></button>
                 </div>
             </div>
             <p class="cal-help">Geçmiş ve bugünkü iş günleri otomatik <b>Geldi</b> (yeşil) sayılır. Bir güne tıklayıp
@@ -429,10 +513,10 @@ if ($upgradeNeeded) {
 
             <div id="saveBar" class="floating-save-bar">
                 <span style="color:var(--text); font-weight:700; font-size:13.5px; display:inline-flex; align-items:center; gap:8px;">
-                    <span class="ms" style="color:var(--primary);">info</span>
+                    <span class="ms" style="color:var(--primary);"><?= svg_icon('info') ?></span>
                     Kaydedilmemiş <b id="pendCount" style="color:var(--primary); font-weight:800;">0</b> değişiklik var
                 </span>
-                <button type="button" class="btn btn-primary btn-sm" id="saveBtn"><span class="ms sm">save</span> Kaydet</button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveBtn"><span class="ms sm"><?= svg_icon('save') ?></span> Kaydet</button>
                 <button type="button" class="btn btn-light btn-sm" id="discardBtn">Vazgeç</button>
             </div>
 
@@ -482,6 +566,7 @@ if ($upgradeNeeded) {
                                 elseif ($status === 'izinli')   { $classes .= ' izin'; }
                                 elseif ($status === 'raporlu')  { $classes .= ' rapor'; }
                                 elseif ($dStr > $todayStr)      { $classes .= ' fut'; }
+                                elseif ($dStr === $todayStr && $status !== 'geldi') { $classes .= ' today-pending'; }
                                 else                            { $classes .= ' geldi'; }
                                 if ($dStr === $todayStr)        { $classes .= ' today'; }
                                 $text = ''; // No labels inside cells for workdays
@@ -533,121 +618,133 @@ if ($upgradeNeeded) {
     </div>
 </div>
 
-<!-- Alt bölüm: Değerlendirme + Notlar + Belgeler -->
-<div class="card" style="margin-top:20px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-        <h3 class="card-title" style="display:flex; align-items:center; gap:8px;">
-            <span class="ms" style="color:var(--primary);">star</span> Haftalık Değerlendirme &amp; Görevler
-        </h3>
+<?php
+// Compute evaluation metrics
+$scoredEvals = [];
+if (!empty($evals)) {
+    $scoredEvals = array_filter($evals, function($ev) {
+        return $ev['score'] !== null && $ev['score'] > 0;
+    });
+}
+$scoreCount = count($scoredEvals);
+$totalScore = array_sum(array_column($scoredEvals, 'score'));
+$averageScore = $scoreCount > 0 ? round($totalScore / $scoreCount, 2) : null;
+$weekLabels = [];
+if (!empty($weeks)) {
+    $weekLabels = array_column($weeks, 'label', 'start');
+}
+?>
+
+<div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; margin-top:20px;">
+    <!-- Sol Taraf: Görev Girişi Kartı -->
+    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between; min-height:280px; box-sizing:border-box;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin:0;">
+                <span class="ms" style="color:var(--primary);"><?= svg_icon('edit') ?></span> Görev Girişi
+            </h3>
+            <button type="submit" form="saveTaskForm" id="saveTaskBtn" class="btn btn-primary btn-sm" disabled style="margin:0;"><span class="ms sm"><?= svg_icon('save') ?></span> Kaydet</button>
+        </div>
+
+        <?php if (!$weeks): ?>
+            <p class="muted">Staj tarihleri tanımlı değil.</p>
+        <?php else: ?>
+            <form method="post" id="saveTaskForm" class="eval-form" style="display:flex; flex-direction:column; justify-content:space-between; flex:1; margin:0;">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="eval_save">
+                <input type="hidden" name="intern_id" value="<?= (int) $intern['id'] ?>">
+                
+                <div style="margin-bottom:10px;">
+                    <label style="margin:0;">Hafta Seçimi
+                        <select name="week_start" id="weekSelect" style="margin:0;">
+                             <?php foreach ($weeks as $w): $has = isset($evalByWeek[$w['start']]); ?>
+                                <option value="<?= $w['start'] ?>" <?= $w['start'] === $defaultWeek ? 'selected' : '' ?>>
+                                    <?= e($w['label']) ?><?= $has ? ' ✓' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                </div>
+                
+                <div style="margin-bottom:12px; flex:1; display:flex; flex-direction:column;">
+                    <label style="margin:0; flex:1; display:flex; flex-direction:column;">Bu Haftaki Görev
+                        <textarea name="task" id="taskTextarea" placeholder="Bu hafta stajyerin yapması gereken görevleri buraya girin…" style="margin:0; flex:1; min-height:80px; resize:none;"></textarea>
+                    </label>
+                </div>
+
+                <div style="text-align: center; margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 10px;">
+                    <a href="tasks_history.php?id=<?= $id ?>" class="row-link" style="font-weight: 700; font-size: 13.5px; color: var(--primary); display: inline-flex; align-items: center; gap: 4px; justify-content: center; width: 100%;">
+                        <span class="ms sm"><?= svg_icon('history') ?></span> Görev Geçmişi
+                    </a>
+                </div>
+            </form>
+        <?php endif; ?>
     </div>
 
-    <?php if (!$weeks): ?>
-        <p class="muted">Staj tarihleri tanımlı değil.</p>
-    <?php else: ?>
-        <form method="post" class="eval-form">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="eval_save">
-            <input type="hidden" name="intern_id" value="<?= (int) $intern['id'] ?>">
-            <div class="grid-2">
-                <label>Hafta
-                    <select name="week_start" id="weekSelect">
-                        <?php foreach ($weeks as $w): $has = isset($evalByWeek[$w['start']]); ?>
-                            <option value="<?= $w['start'] ?>" <?= $w['start'] === $defaultWeek ? 'selected' : '' ?>>
-                                <?= e($w['label']) ?><?= $has ? ' ✓' : '' ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label>Not (1-10)
-                    <select name="score">
-                        <option value="0">— Verilmedi —</option>
-                        <?php for ($p = 10; $p >= 1; $p--): ?>
-                            <option value="<?= $p ?>"><?= $p ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </label>
-            </div>
-            <div class="grid-2">
-                <label>Bu Haftaki Görev
-                    <textarea name="task" rows="3" placeholder="Bu hafta stajyere verilen görev(ler)…"></textarea>
-                </label>
-                <label>Değerlendirme
-                    <textarea name="comment" rows="3" placeholder="Performans değerlendirmesi…"></textarea>
-                </label>
-            </div>
-            <button type="submit" class="btn btn-primary"><span class="ms sm">save</span> Değerlendirmeyi Kaydet</button>
-            <p class="muted" style="font-size:12.5px; margin:10px 0 0;">Aynı hafta için tekrar kaydederseniz önceki değerlendirme güncellenir. ✓ işaretli haftaların kaydı vardır.</p>
-        </form>
-
-        <?php if ($evals): ?>
-            <div style="margin-top:22px; border-top:1px solid var(--line-soft); overflow-x:auto;">
-                <table class="eval-table">
-                    <thead>
-                        <tr>
-                            <th>Hafta</th>
-                            <th>Not</th>
-                            <th>Görev</th>
-                            <th>Değerlendirme</th>
-                            <th>Yetkili / Tarih</th>
-                            <th style="text-align:right;">İşlem</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php
-                        $weekLabels = array_column($weeks, 'label', 'start');
-                        foreach ($evals as $ev): ?>
-                            <tr>
-                                <td>
-                                    <span style="font-weight:600; font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;">
-                                        <span class="ms sm" style="font-size:15px; color:var(--primary); width:15px; height:15px;">calendar_today</span>
-                                        <?= e($weekLabels[$ev['week_start']] ?? format_date($ev['week_start'])) ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?php if ($ev['score'] !== null): ?>
-                                        <span class="badge <?= (int) $ev['score'] >= 8 ? 'badge-aktif' : ((int) $ev['score'] >= 5 ? 'badge-baslamadi' : 'badge-devamsiz') ?>">
-                                            <?= (int) $ev['score'] ?>/10
-                                        </span>
-                                    <?php else: ?>
-                                        <span class="muted">—</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <div style="white-space:pre-line; max-width:250px; line-height:1.4;"><?= (string) $ev['task'] !== '' ? e($ev['task']) : '<span class="muted">—</span>' ?></div>
-                                </td>
-                                <td>
-                                    <div style="white-space:pre-line; max-width:250px; line-height:1.4;"><?= (string) $ev['comment'] !== '' ? e($ev['comment']) : '<span class="muted">—</span>' ?></div>
-                                </td>
-                                <td>
-                                    <span style="font-size:12px; color:var(--text); font-weight:600; display:block; white-space:nowrap;"><?= e($ev['user_name']) ?></span>
-                                    <span class="row-sub" style="font-size:11px; white-space:nowrap;"><?= e(date('d.m.Y', strtotime($ev['updated_at']))) ?></span>
-                                </td>
-                                <td style="text-align:right;">
-                                    <form method="post" style="margin:0;" onsubmit="return confirm('Bu değerlendirme silinsin mi?');">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="action" value="eval_delete">
-                                        <input type="hidden" name="intern_id" value="<?= (int) $intern['id'] ?>">
-                                        <input type="hidden" name="eval_id" value="<?= (int) $ev['id'] ?>">
-                                        <button type="submit" class="btn-icon danger" title="Sil" style="width:30px; height:30px;"><span class="ms">delete</span></button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-    <?php endif; ?>
+    <!-- Sağ Taraf: Büyük Yıldız ve Ağırlıklı Puan Kartı -->
+    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:280px; box-sizing:border-box;">
+        <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin-bottom:12px; align-self:flex-start; margin-top:0;">
+            <span class="ms" style="color:var(--primary);"><?= svg_icon('star') ?></span> Genel Puan
+        </h3>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; width: 100%;">
+            <!-- Big Star Icon (Custom Image or Fallback SVG) -->
+            <?php
+            $customStarPath = 'assets/img/star.png';
+            if (file_exists(__DIR__ . '/' . $customStarPath)): ?>
+                <img src="<?= $customStarPath ?>" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 12px;" alt="Star">
+            <?php else: ?>
+                <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-radius: 50%; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.12);">
+                    <span class="ms" style="font-size: 32px; width: 32px; height: 32px; display: block; line-height: 1;"><?= svg_icon('star') ?></span>
+                </div>
+            <?php endif; ?>
+            
+            <!-- Weighted Score -->
+            <?php if ($averageScore !== null): ?>
+                <div style="font-size: 36px; font-weight: 800; color: var(--text); margin-bottom: 4px; line-height: 1; font-family: var(--font-head);">
+                    <?= $averageScore ?> <span style="font-size: 16px; color: var(--text-2); font-weight: 500;">/ 10</span>
+                </div>
+                <!-- Success Status -->
+                <div style="font-weight: 700; font-size: 12.5px; margin-top: 2px;">
+                    <?php if ($averageScore >= 8): ?>
+                        <span style="color: var(--success);">Pekiyi</span>
+                    <?php elseif ($averageScore >= 5): ?>
+                        <span style="color: var(--warning);">Orta</span>
+                    <?php else: ?>
+                        <span style="color: var(--danger);">Yetersiz</span>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <div style="font-size: 14px; font-weight: 600; color: var(--text-2); margin-bottom: 4px;">
+                    Puan Yok
+                </div>
+                <div style="font-size: 10px; color: var(--muted); max-width: 150px;">
+                    Puanlar girildiğinde hesaplanır.
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('taskTextarea');
+    const saveBtn = document.getElementById('saveTaskBtn');
+    if (textarea && saveBtn) {
+        textarea.addEventListener('input', function() {
+            saveBtn.disabled = (textarea.value.trim() === '');
+        });
+    }
+});
+</script>
+
+<!-- Staj Notları ve Belgeler Kartları (Row 2) -->
 <div class="grid-2" style="margin-top:20px;">
     <!-- Staj Notları -->
-    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; height:640px; box-sizing:border-box;">
+    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; height:520px; box-sizing:border-box;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin:0;">
                 <span class="ms" style="color:var(--primary);">edit</span> Staj Notları
             </h3>
-            <a href="notes.php?id=<?= $id ?>" id="viewAllNotesLink" class="btn btn-light btn-xs" style="font-size:11.5px; font-weight:700; <?= count($notes) > 4 ? '' : 'display:none;' ?>">Tümünü Görüntüle</a>
+            <a href="notes.php?id=<?= $id ?>" id="viewAllNotesLink" class="btn btn-light btn-xs" style="font-size:11.5px; font-weight:700; <?= count($notes) > 3 ? '' : 'display:none;' ?>">Tümünü Görüntüle</a>
         </div>
         <form method="post" id="addNoteForm" style="margin-bottom:18px;">
             <?= csrf_field() ?>
@@ -663,7 +760,7 @@ if ($upgradeNeeded) {
             <?php if (!$notes): ?>
                 <p class="muted" style="margin:0;">Henüz staj notu eklenmemiş.</p>
             <?php else: ?>
-                <?php foreach (array_slice($notes, 0, 4) as $n): ?>
+                <?php foreach (array_slice($notes, 0, 3) as $n): ?>
                     <div class="note-item" style="border-bottom:1px solid var(--line-soft); padding-bottom:12px; margin-bottom:12px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                             <span class="section-label" style="color:var(--primary);">
@@ -699,12 +796,12 @@ if ($upgradeNeeded) {
     </div>
 
     <!-- Yüklenen Belgeler -->
-    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; height:640px; box-sizing:border-box;">
+    <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; height:520px; box-sizing:border-box;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin:0;">
                 <span class="ms" style="color:var(--primary);">folder</span> Yüklenen Belgeler
             </h3>
-            <a href="documents.php?id=<?= $id ?>" id="viewAllDocsLink" class="btn btn-light btn-xs" style="font-size:11.5px; font-weight:700; <?= count($docs) > 4 ? '' : 'display:none;' ?>">Tümünü Görüntüle</a>
+            <a href="documents.php?id=<?= $id ?>" id="viewAllDocsLink" class="btn btn-light btn-xs" style="font-size:11.5px; font-weight:700; <?= count($docs) > 3 ? '' : 'display:none;' ?>">Tümünü Görüntüle</a>
         </div>
         <form method="post" id="uploadDocForm" enctype="multipart/form-data" style="margin-bottom:18px; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
             <?= csrf_field() ?>
@@ -721,7 +818,7 @@ if ($upgradeNeeded) {
             <?php if (!$docs): ?>
                 <p class="muted" style="margin:0;">Henüz belge yüklenmemiş.</p>
             <?php else: ?>
-                <?php foreach (array_slice($docs, 0, 4) as $d): ?>
+                <?php foreach (array_slice($docs, 0, 3) as $d): ?>
                     <div class="doc-item">
                         <span class="info-icon" style="width:38px;height:38px;"><span class="ms">description</span></span>
                         <div style="flex:1; min-width:0;">
@@ -742,6 +839,88 @@ if ($upgradeNeeded) {
         </div>
     </div>
 </div>
+
+<!-- Haftalık Değerlendirmeler Tablosu (Row 3) -->
+<?php if ($weeks && $evals): ?>
+    <div class="card" style="margin-top:20px; margin-bottom:0;">
+        <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin-bottom:16px; margin-top:0;">
+            <span class="ms" style="color:var(--primary);">calendar_today</span> Haftalık Değerlendirmeler
+        </h3>
+        
+        <div style="overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px;">
+            <table class="eval-table" style="width:100%; table-layout:fixed; border-collapse:collapse;">
+                <colgroup>
+                    <col style="width: 170px;"> <!-- Hafta -->
+                    <col style="width: 90px;">  <!-- Not -->
+                    <col style="width: 220px;"> <!-- Görev -->
+                    <col style="width: 250px;"> <!-- Değerlendirme -->
+                    <col style="width: 140px;"> <!-- Yetkili / Tarih -->
+                    <col style="width: 70px;">  <!-- İşlem -->
+                </colgroup>
+                <thead>
+                    <tr style="background: var(--hover);">
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft);">Hafta</th>
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft); text-align:center;">Not</th>
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft);">Görev</th>
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft);">Değerlendirme</th>
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft);">Yetkili / Tarih</th>
+                        <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line-soft); text-align:right;">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach (array_slice($evals, 0, 3) as $ev): ?>
+                        <tr style="border-bottom: 1px solid var(--line-soft);">
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle;">
+                                <form id="row_form_<?= $ev['id'] ?>" method="post" style="margin:0;">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="eval_save">
+                                    <input type="hidden" name="week_start" value="<?= e($ev['week_start']) ?>">
+                                    <input type="hidden" name="task" value="<?= e($ev['task']) ?>">
+                                </form>
+                                <span style="font-weight:600; font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;">
+                                    <span class="ms sm" style="font-size:15px; color:var(--primary); width:15px; height:15px;">calendar_today</span>
+                                    <?= e($weekLabels[$ev['week_start']] ?? format_date($ev['week_start'])) ?>
+                                </span>
+                            </td>
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle; text-align:center;">
+                                <select name="score" form="row_form_<?= $ev['id'] ?>" style="margin:0; padding:4px 6px; font-size:12.5px; width:100%; box-sizing:border-box;">
+                                    <option value="0">—</option>
+                                    <?php for($p=10; $p>=1; $p--): ?>
+                                        <option value="<?= $p ?>" <?= (int)$ev['score'] === $p ? 'selected' : '' ?>><?= $p ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </td>
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle; word-wrap: break-word !important; word-break: break-all !important; white-space: normal !important; line-height:1.4;">
+                                <?= (string) $ev['task'] !== '' ? e($ev['task']) : '<span class="muted">—</span>' ?>
+                            </td>
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle;">
+                                <input type="text" name="comment" value="<?= e($ev['comment']) ?>" form="row_form_<?= $ev['id'] ?>" style="margin:0; padding:6px; font-size:12.5px; width:100%; box-sizing:border-box;" placeholder="Değerlendirme girin…">
+                            </td>
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle; line-height:1.3;">
+                                <span style="font-size:12px; color:var(--text); font-weight:600; display:block; white-space:nowrap;"><?= e($ev['user_name']) ?></span>
+                                <span class="row-sub" style="font-size:11px; white-space:nowrap;"><?= e(date('d.m.Y', strtotime($ev['updated_at']))) ?></span>
+                            </td>
+                            <td style="padding: 10px 12px; font-size: 13px; vertical-align: middle; text-align:right;">
+                                <div style="display:flex; gap:4px; align-items:center; justify-content:flex-end;">
+                                    <button type="submit" form="row_form_<?= $ev['id'] ?>" class="btn-icon" style="width:30px; height:30px; color:var(--success);" title="Kaydet">
+                                        <span class="ms sm">save</span>
+                                    </button>
+                                    <form method="post" style="margin:0;" onsubmit="return confirm('Bu değerlendirmeyi silmek istediğinize emin misiniz?');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="eval_delete">
+                                        <input type="hidden" name="intern_id" value="<?= (int) $intern['id'] ?>">
+                                        <input type="hidden" name="eval_id" value="<?= (int) $ev['id'] ?>">
+                                        <button type="submit" class="btn-icon danger" style="width:30px; height:30px;" title="Sil"><span class="ms sm">delete</span></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="delete-section">
     <form method="post" action="delete.php" onsubmit="return confirm('Bu stajyer kaydı kalıcı olarak silinecek. Emin misiniz?');">
@@ -870,27 +1049,42 @@ if ($upgradeNeeded) {
     }
 
     function recount() {
-        var dev = 0, izin = 0, rapor = 0, devPast = 0, izinPast = 0, raporPast = 0, pastCells = 0;
+        var dev = 0, izin = 0, rapor = 0, geldi = 0;
         document.querySelectorAll('.cal-day.clickable').forEach(function (c) {
-            var past = c.dataset.date <= TODAY;
-            if (past) pastCells++;
-            if (c.dataset.status === 'devamsiz') { dev++;  if (past) devPast++; }
-            if (c.dataset.status === 'izinli')   { izin++; if (past) izinPast++; }
-            if (c.dataset.status === 'raporlu')  { rapor++; if (past) raporPast++; }
+            var past = c.dataset.date < TODAY;
+            var isToday = c.dataset.date === TODAY;
+            var status = c.dataset.status || '';
+            
+            if (past) {
+                if      (status === 'devamsiz') { dev++; }
+                else if (status === 'izinli')   { izin++; }
+                else if (status === 'raporlu')  { rapor++; }
+                else                            { geldi++; }
+            } else if (isToday) {
+                if      (status === 'devamsiz') { dev++; }
+                else if (status === 'izinli')   { izin++; }
+                else if (status === 'raporlu')  { rapor++; }
+                else if (status === 'geldi')    { geldi++; }
+            } else {
+                if      (status === 'devamsiz') { dev++; }
+                else if (status === 'izinli')   { izin++; }
+                else if (status === 'raporlu')  { rapor++; }
+            }
         });
         document.getElementById('cntDev').textContent   = dev;
         document.getElementById('cntIzin').textContent  = izin;
         document.getElementById('cntRapor').textContent = rapor;
-        document.getElementById('cntGeldi').textContent = Math.max(0, pastCells - devPast - izinPast - raporPast);
+        document.getElementById('cntGeldi').textContent = geldi;
     }
 
     function paint(cell, status) {
         cell.dataset.status = status;
-        cell.classList.remove('dev', 'izin', 'rapor', 'geldi', 'fut');
+        cell.classList.remove('dev', 'izin', 'rapor', 'geldi', 'fut', 'today-pending');
         if      (status === 'devamsiz') { cell.classList.add('dev'); }
         else if (status === 'izinli')   { cell.classList.add('izin'); }
         else if (status === 'raporlu')  { cell.classList.add('rapor'); }
         else if (cell.dataset.date > TODAY) { cell.classList.add('fut'); }
+        else if (cell.dataset.date === TODAY && status !== 'geldi') { cell.classList.add('today-pending'); }
         else { cell.classList.add('geldi'); }
         var s = cell.querySelector('.s');
         if (s) s.textContent = '';
@@ -1023,7 +1217,7 @@ if ($upgradeNeeded) {
                 container.innerHTML = res.html;
                 if (window.renderIcons) window.renderIcons(container);
                 var link = document.getElementById('viewAllNotesLink');
-                if (link) link.style.display = res.count > 4 ? 'inline-block' : 'none';
+                if (link) link.style.display = res.count > 3 ? 'inline-block' : 'none';
             });
     }
 
@@ -1035,7 +1229,7 @@ if ($upgradeNeeded) {
                 container.innerHTML = res.html;
                 if (window.renderIcons) window.renderIcons(container);
                 var link = document.getElementById('viewAllDocsLink');
-                if (link) link.style.display = res.count > 4 ? 'inline-block' : 'none';
+                if (link) link.style.display = res.count > 3 ? 'inline-block' : 'none';
             });
     }
 
@@ -1105,13 +1299,73 @@ if ($upgradeNeeded) {
         var form = weekSel.closest('form');
         function fillEval() {
             var found = evalData.find(function (e) { return e.week === weekSel.value; });
-            form.querySelector('[name=score]').value   = found ? found.score : 0;
-            form.querySelector('[name=task]').value    = found ? found.task : '';
-            form.querySelector('[name=comment]').value = found ? found.comment : '';
+            var taskField = form.querySelector('[name=task]');
+            if (taskField) taskField.value = found ? found.task : '';
+            
+            // Update save task button disabled state
+            const saveBtn = document.getElementById('saveTaskBtn');
+            if (saveBtn && taskField) {
+                saveBtn.disabled = (taskField.value.trim() === '');
+            }
         }
         weekSel.addEventListener('change', fillEval);
         fillEval();
     }
 })();
 </script>
+
+<!-- Geçmiş Stajlar (aynı TC ile farklı dönemlerde yapılan stajlar) -->
+<div class="card" style="margin-top:20px; margin-bottom:0;">
+    <h3 class="card-title" style="display:flex; align-items:center; gap:8px; margin-bottom:4px; margin-top:0;">
+        <span class="ms" style="color:var(--primary);">history</span> Geçmiş Stajlar
+    </h3>
+    <p class="muted" style="margin:0 0 16px; font-size:13px;">Aynı T.C. Kimlik No ile daha önce yapılmış diğer staj kayıtları ve değerlendirmeleri.</p>
+
+    <?php if (!$pastInternships): ?>
+        <p class="muted" style="margin:0;">Bu kişiye ait geçmiş bir staj kaydı bulunmuyor.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Dönem</th>
+                        <th style="text-align:left;">Okul / Bölüm</th>
+                        <th style="text-align:center;">Seviye</th>
+                        <th style="text-align:center;">Değerlendirme</th>
+                        <th style="text-align:right; padding-right:16px;">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($pastInternships as $pi):
+                        $piLevel = LEVELS[$pi['level']] ?? $pi['level'];
+                        $piPeriod = $pi['period_name'] ?: (date('d.m.Y', strtotime($pi['start_date'])) . ' – ' . date('d.m.Y', strtotime($pi['end_date'])));
+                    ?>
+                        <tr>
+                            <td style="text-align:left;">
+                                <b><?= e($piPeriod) ?></b>
+                                <div class="muted" style="font-size:12px;"><?= e(date('d.m.Y', strtotime($pi['start_date']))) ?> – <?= e(date('d.m.Y', strtotime($pi['end_date']))) ?></div>
+                            </td>
+                            <td style="text-align:left;">
+                                <?= e($pi['school'] ?: '—') ?>
+                                <div class="muted" style="font-size:12px;"><?= e($pi['department']) ?></div>
+                            </td>
+                            <td style="text-align:center;"><span class="badge badge-info"><?= e($piLevel) ?></span></td>
+                            <td style="text-align:center;">
+                                <?php if ($pi['avg_score'] !== null): ?>
+                                    <b style="font-size:15px; color:var(--primary);"><?= e($pi['avg_score']) ?></b><span class="muted" style="font-size:12px;">/10</span>
+                                    <div class="muted" style="font-size:11px;"><?= (int) $pi['eval_count'] ?> değerlendirme</div>
+                                <?php else: ?>
+                                    <span class="muted" style="font-size:12.5px;">Değerlendirme yok</span>
+                                <?php endif; ?>
+                            </td>
+                            <td style="text-align:right; padding-right:16px;">
+                                <a href="view.php?id=<?= (int) $pi['id'] ?>" class="row-link" style="color:var(--primary); font-weight:700; font-size:13px; text-decoration:none;">Görüntüle</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>
 <?php render_footer(); ?>

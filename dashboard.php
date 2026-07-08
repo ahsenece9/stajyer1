@@ -11,7 +11,7 @@ $countsQuery = "SELECT
         SUM(start_date > CURDATE()) AS baslamadi
      FROM interns";
 if (is_mentor()) {
-    $countsQuery .= " WHERE mentor_id = " . (int)$_SESSION['user_id'];
+    $countsQuery .= " WHERE assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $counts = db()->query($countsQuery)->fetch();
 
@@ -24,7 +24,7 @@ $todayQuery = "SELECT
      WHERE a.work_date = CURDATE()
        AND i.start_date <= CURDATE() AND i.end_date >= CURDATE()";
 if (is_mentor()) {
-    $todayQuery .= " AND i.mentor_id = " . (int)$_SESSION['user_id'];
+    $todayQuery .= " AND i.assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $today = db()->query($todayQuery)->fetch();
 
@@ -36,17 +36,17 @@ $geldiToday = $isWeekday ? max(0, $aktif - $devToday - $izinToday) : 0;
 /* ---- Son eklenen stajyerler ---- */
 $recentQuery = 'SELECT * FROM interns';
 if (is_mentor()) {
-    $recentQuery .= ' WHERE mentor_id = ' . (int)$_SESSION['user_id'];
+    $recentQuery .= ' WHERE assigned_department = ' . db()->quote($_SESSION['user_department'] ?? '');
 }
 $recentQuery .= ' ORDER BY created_at DESC, id DESC LIMIT 5';
 $recent = db()->query($recentQuery)->fetchAll();
 
-/* ---- Yaklaşan bitişler (aktif stajlar) ---- */
+/* ---- Yaklaşan bitişler (aktif stajlar, son 1 hafta kaldıysa) ---- */
 $endingQuery = "SELECT *, DATEDIFF(end_date, CURDATE()) AS kalan
      FROM interns
-     WHERE start_date <= CURDATE() AND end_date >= CURDATE()";
+     WHERE start_date <= CURDATE() AND end_date >= CURDATE() AND DATEDIFF(end_date, CURDATE()) <= 7";
 if (is_mentor()) {
-    $endingQuery .= " AND mentor_id = " . (int)$_SESSION['user_id'];
+    $endingQuery .= " AND assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $endingQuery .= " ORDER BY end_date ASC LIMIT 5";
 $ending = db()->query($endingQuery)->fetchAll();
@@ -69,7 +69,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
             <div class="stat-value c-primary"><?= (int) $counts['toplam'] ?></div>
             <div class="stat-note">Tüm kayıtlar</div>
         </div>
-        <span class="stat-icon i-primary"><span class="ms">group</span></span>
+        <span class="stat-icon i-primary"><span class="ms"><?= svg_icon('group') ?></span></span>
     </div>
     <div class="stat-card">
         <div>
@@ -77,7 +77,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
             <div class="stat-value"><?= $aktif ?></div>
             <div class="stat-note">Stajı devam edenler</div>
         </div>
-        <span class="stat-icon i-success"><span class="ms">check_circle</span></span>
+        <span class="stat-icon i-success"><span class="ms"><?= svg_icon('check_circle') ?></span></span>
     </div>
     <div class="stat-card">
         <div>
@@ -85,7 +85,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
             <div class="stat-value"><?= $isWeekday ? $geldiToday : '—' ?></div>
             <div class="stat-note"><?= $isWeekday ? 'İşaretlenmeyenler geldi sayılır' : 'Bugün hafta sonu' ?></div>
         </div>
-        <span class="stat-icon i-primary"><span class="ms">login</span></span>
+        <span class="stat-icon i-primary"><span class="ms"><?= svg_icon('login') ?></span></span>
     </div>
     <div class="stat-card">
         <div>
@@ -93,7 +93,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
             <div class="stat-value c-danger"><?= $isWeekday ? $devToday : '—' ?></div>
             <div class="stat-note"><?= $izinToday > 0 && $isWeekday ? '+ ' . $izinToday . ' izinli' : 'İzinsiz gelmeyenler' ?></div>
         </div>
-        <span class="stat-icon i-danger"><span class="ms">event_busy</span></span>
+        <span class="stat-icon i-danger"><span class="ms"><?= svg_icon('event_busy') ?></span></span>
     </div>
 </div>
 
@@ -101,7 +101,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
     <div class="card" style="margin-bottom:0;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
             <h3 class="card-title">Son Eklenen Stajyerler</h3>
-            <a href="index.php" class="btn btn-light btn-sm">Tümünü Gör <span class="ms sm">arrow_forward</span></a>
+            <a href="index.php" class="btn btn-light btn-sm">Tümünü Gör <span class="ms sm"><?= svg_icon('arrow_forward') ?></span></a>
         </div>
         <?php if (!$recent): ?>
             <div class="empty-state"><p>Henüz stajyer kaydı yok.</p>
@@ -109,7 +109,7 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
         <?php else: ?>
             <div style="overflow-x:auto;">
             <table>
-                <thead><tr><th>Stajyer</th><th>Bölüm</th><th>Dönem</th><th>Durum</th></tr></thead>
+                <thead><tr><th>Stajyer</th><th>Okul / Bölüm</th><th>Dönem</th><th>Gün</th><th>Durum</th></tr></thead>
                 <tbody>
                 <?php foreach ($recent as $i): [$cls, $label] = intern_status($i); ?>
                     <tr>
@@ -124,9 +124,12 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
                                 <span class="row-sub"><?= e($i['phone']) ?></span></span>
                             </a>
                         </td>
-                        <td><?= e($i['department']) ?></td>
-                        <td><?= format_date($i['start_date']) ?> – <?= format_date($i['end_date']) ?><br>
-                            <span class="row-sub"><?= intern_days($i) ?> gün</span></td>
+                        <td>
+                            <span><?= e($i['school']) ?></span><br>
+                            <span class="row-sub"><?= e($i['department']) ?></span>
+                        </td>
+                        <td><?= format_date($i['start_date']) ?> – <?= format_date($i['end_date']) ?></td>
+                        <td><?= intern_days($i) ?> gün</td>
                         <td><span class="badge badge-<?= $cls ?>"><?= $label ?></span></td>
                     </tr>
                 <?php endforeach; ?>
@@ -139,10 +142,10 @@ $firstName = trim(explode(' ', (string) $_SESSION['user_name'])[0] ?? '');
     <div class="card" style="margin-bottom:0;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
             <h3 class="card-title">Yaklaşan Bitişler</h3>
-            <span class="ms" style="color:var(--warning);">notification_important</span>
+            <span class="ms" style="color:var(--warning);"><?= svg_icon('notification_important') ?></span>
         </div>
         <?php if (!$ending): ?>
-            <p class="muted" style="margin:0;">Şu anda aktif staj yok.</p>
+            <p class="muted" style="margin:0;">Stajı bitmek üzere olan stajyer bulunmuyor.</p>
         <?php else: ?>
             <?php foreach ($ending as $i2): $pct = intern_progress($i2); $kalan = (int) $i2['kalan']; ?>
                 <a href="view.php?id=<?= (int) $i2['id'] ?>"

@@ -71,6 +71,8 @@ $steps = [
         "ALTER TABLE interns ADD COLUMN IF NOT EXISTS school VARCHAR(150) NOT NULL DEFAULT '' AFTER department",
     'Stajyerlere eğitim seviyesi alanı' =>
         "ALTER TABLE interns ADD COLUMN IF NOT EXISTS level VARCHAR(20) NOT NULL DEFAULT 'lisans' AFTER school",
+    'Yetkililere birim alanı' =>
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(150) DEFAULT NULL AFTER role",
     'Stajyerlere sorumlu yetkili alanı' =>
         "ALTER TABLE interns ADD COLUMN IF NOT EXISTS mentor_id INT UNSIGNED DEFAULT NULL AFTER note",
     'Stajyerlere beceriler alanı' =>
@@ -134,6 +136,8 @@ $steps = [
             KEY idx_action (action),
             KEY idx_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_turkish_ci",
+    'Stajyerlere staj yaptığı birim alanı' =>
+        "ALTER TABLE interns ADD COLUMN IF NOT EXISTS assigned_department VARCHAR(150) DEFAULT NULL AFTER level",
 ];
 
 $results = [];

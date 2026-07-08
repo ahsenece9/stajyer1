@@ -26,10 +26,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $address  = trim((string) ($_POST['address'] ?? ''));
         $periodId = (int) ($_POST['period_id'] ?? 0);
 
+        // Aynı TC'nin bu döneme daha önce (reddedilmemiş) başvurusu var mı? — mantıksal tekillik
+        $tcDuplicate = false;
+        if ($tc !== '' && $periodId !== 0) {
+            $dupStmt = db()->prepare("SELECT COUNT(*) FROM applications WHERE tc_no = ? AND period_id = ? AND status <> 'reddedildi'");
+            $dupStmt->execute([$tc, $periodId]);
+            $tcDuplicate = (int) $dupStmt->fetchColumn() > 0;
+        }
+
         if ($tc === '' || $first === '' || $last === '' || $email === '' || $phone === '' || $school === '' || $dept === '' || $periodId === 0) {
             $error = 'Lütfen tüm yıldızlı (*) alanları doldurun.';
         } elseif (strlen($tc) !== 11 || !ctype_digit($tc)) {
             $error = 'TC Kimlik Numarası 11 haneli bir sayı olmalıdır.';
+        } elseif ($tcDuplicate) {
+            $error = 'Bu TC Kimlik Numarası ile bu döneme zaten başvuru yapılmış. Aynı döneme yalnızca bir kez başvurabilirsiniz. (Farklı dönemlerde tekrar başvurabilirsiniz.)';
         } else {
             // Upload documents helper
             $uploaded = [];
@@ -83,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $uploaded['doc_student_cert'], $uploaded['doc_intern_form'], $uploaded['doc_sgk'], $uploaded['photo']
                 ]);
 
+                // Loglama — halka açık işlem: aday adı ve IP kaydedilir
+                log_action('basvuru', 'Staj başvurusu: ' . $first . ' ' . $last . ' (TC: ' . $tc . ')', $first . ' ' . $last);
+
                 $success = true;
             } catch (Exception $ex) {
                 // Delete uploaded files on failure
@@ -100,7 +113,7 @@ render_head('Staj Başvuru Formu');
 <body class="auth-body">
 <div class="auth-card" style="max-width: 650px; margin: 40px auto; padding: 30px;">
     <div style="text-align: center; margin-bottom: 24px;">
-        <span class="sb-logo" style="width: 50px; height: 50px; font-size: 24px; margin: 0 auto 12px;"><span class="ms">school</span></span>
+        <span class="sb-logo" style="width: 50px; height: 50px; margin: 0 auto 12px; background:transparent; border:none; padding:0; box-shadow:none;"><img src="<?= logo_url() ?>" style="width:100%; height:100%; object-fit:contain;"></span>
         <h1 style="margin: 0; font-size: 24px;">Staj Başvuru Formu</h1>
         <p class="muted">Bilgilerinizi eksiksiz doldurarak başvurunuzu gerçekleştirebilirsiniz.</p>
     </div>

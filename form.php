@@ -11,6 +11,9 @@ $errors = [];
 
 $mentors = db()->query('SELECT id, full_name FROM users ORDER BY full_name')->fetchAll();
 
+// Daire başkanlıklarını çek
+$depts = db()->query('SELECT DISTINCT department_name FROM department_quotas ORDER BY department_name ASC')->fetchAll(PDO::FETCH_COLUMN);
+
 // Form alanları ve varsayılanlar
 $intern = [
     'tc_no'              => '',
@@ -19,7 +22,9 @@ $intern = [
     'department'         => '',
     'school'             => '',
     'level'              => 'lisans',
+    'type'               => 'zorunlu',
     'mentor_id'          => null,
+    'assigned_department' => '',
     'phone'              => '',
     'address'            => '',
     'emergency_name'     => '',
@@ -41,7 +46,7 @@ if ($isEdit) {
         redirect('index.php');
     }
     // Veritabanı henüz güncellenmemişse yeni alanlar için varsayılanlar
-    $intern = $found + ['tc_no' => '', 'school' => '', 'level' => 'lisans', 'mentor_id' => null, 'skills' => ''];
+    $intern = $found + ['tc_no' => '', 'school' => '', 'level' => 'lisans', 'type' => 'zorunlu', 'mentor_id' => null, 'skills' => '', 'assigned_department' => ''];
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -49,10 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     foreach (['tc_no', 'first_name', 'last_name', 'department', 'school', 'phone', 'address',
               'emergency_name', 'emergency_relation', 'emergency_phone',
-              'start_date', 'end_date', 'note', 'skills'] as $field) {
+              'start_date', 'end_date', 'note', 'skills', 'assigned_department'] as $field) {
         $intern[$field] = trim((string) ($_POST[$field] ?? ''));
     }
     $intern['level'] = isset(LEVELS[$_POST['level'] ?? '']) ? $_POST['level'] : 'lisans';
+    $intern['type'] = in_array($_POST['type'] ?? '', ['zorunlu', 'gonullu'], true) ? $_POST['type'] : 'zorunlu';
     $intern['mentor_id'] = ((int) ($_POST['mentor_id'] ?? 0)) > 0 ? (int) $_POST['mentor_id'] : null;
 
     // Doğrulama
@@ -86,6 +92,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Bitiş tarihi, başlama tarihinden önce olamaz.';
     }
 
+    // Mantıksal tekillik: aynı TC ile tarih aralığı ÇAKIŞAN başka bir staj kaydı olamaz.
+    // Farklı (çakışmayan) dönemlerde aynı TC ile tekrar kayıt serbesttir.
+    if (!$errors && $intern['tc_no'] !== '') {
+        $overlapSql = 'SELECT COUNT(*) FROM interns WHERE tc_no = ? AND start_date <= ? AND end_date >= ?';
+        $overlapParams = [$intern['tc_no'], $intern['end_date'], $intern['start_date']];
+        if ($isEdit) {
+            $overlapSql .= ' AND id <> ?';
+            $overlapParams[] = $id;
+        }
+        $ovStmt = db()->prepare($overlapSql);
+        $ovStmt->execute($overlapParams);
+        if ((int) $ovStmt->fetchColumn() > 0) {
+            $errors[] = 'Bu T.C. Kimlik No ile bu tarih aralığında zaten aktif bir staj kaydı var. Aynı dönemde ikinci kez kayıt yapılamaz (farklı/çakışmayan dönemlerde tekrar kayıt yapılabilir).';
+        }
+    }
+
     // Fotoğraf
     $newPhoto = null;
     if (!$errors) {
@@ -101,18 +123,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $removePhoto = !empty($_POST['photo_delete']);
         $values = [
             $intern['tc_no'], $intern['first_name'], $intern['last_name'], $intern['department'],
-            $intern['school'], $intern['level'], $intern['mentor_id'],
+            $intern['school'], $intern['level'], $intern['type'], $intern['mentor_id'],
             $intern['phone'], $intern['address'],
             $intern['emergency_name'], $intern['emergency_relation'], $intern['emergency_phone'],
             $intern['start_date'], $intern['end_date'], $intern['note'], $intern['skills'],
+            $intern['assigned_department'],
         ];
 
         try {
         if ($isEdit) {
-            $sql = 'UPDATE interns SET tc_no=?, first_name=?, last_name=?, department=?, school=?, level=?, mentor_id=?,
+            $sql = 'UPDATE interns SET tc_no=?, first_name=?, last_name=?, department=?, school=?, level=?, type=?, mentor_id=?,
                     phone=?, address=?,
                     emergency_name=?, emergency_relation=?, emergency_phone=?,
-                    start_date=?, end_date=?, note=?, skills=?';
+                    start_date=?, end_date=?, note=?, skills=?, assigned_department=?';
             if ($newPhoto !== null) {
                 $sql .= ', photo=?';
                 $values[] = $newPhoto;
@@ -133,11 +156,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $values[] = $newPhoto;
         db()->prepare(
             'INSERT INTO interns
-             (tc_no, first_name, last_name, department, school, level, mentor_id,
+             (tc_no, first_name, last_name, department, school, level, type, mentor_id,
               phone, address,
               emergency_name, emergency_relation, emergency_phone,
-              start_date, end_date, note, skills, photo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+              start_date, end_date, note, skills, assigned_department, photo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute($values);
         log_action('stajyer_ekle', $fullName);
         flash_set('success', 'Stajyer kaydedildi.');
@@ -200,9 +223,23 @@ render_header($isEdit ? 'Stajyer Düzenle' : 'Stajyer Ekle', 'index');
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label>Staj Yaptığı Birim / Daire Başkanlığı
+                <input type="text" name="assigned_department" list="dept_list" placeholder="örn. Bilgi İşlem Daire Başkanlığı" value="<?= e($intern['assigned_department'] ?? '') ?>">
+                <datalist id="dept_list">
+                    <?php foreach ($depts as $d): ?>
+                        <option value="<?= e($d) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+            </label>
             <label>Telefon Numarası *
                 <input type="tel" name="phone" required placeholder="05xx xxx xx xx"
                        value="<?= e($intern['phone']) ?>">
+            </label>
+            <label>Staj Türü
+                <select name="type">
+                    <option value="zorunlu" <?= $intern['type'] === 'zorunlu' ? 'selected' : '' ?>>Zorunlu</option>
+                    <option value="gonullu" <?= $intern['type'] === 'gonullu' ? 'selected' : '' ?>>Gönüllü</option>
+                </select>
             </label>
         </div>
         <label>Adres

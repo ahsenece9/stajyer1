@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
 
+if (!empty($_SESSION['user_id'])) {
+    log_action('cikis');
+}
+
 $_SESSION = [];
 if (ini_get('session.use_cookies')) {
     $p = session_get_cookie_params();

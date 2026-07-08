@@ -108,7 +108,7 @@ render_header('Log Sistemi', 'logs');
 <div class="page-head">
     <div>
         <p class="page-sub" style="margin:0 0 4px; display:flex; align-items:center; gap:6px; color:var(--primary); font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.1em;">
-            <span class="ms sm">security</span> Sistem Güvenliği
+            <span class="ms sm"><?= svg_icon('security') ?></span> Sistem Güvenliği
         </p>
         <h1>Log Sistemi</h1>
         <p class="page-sub">Tüm giriş denemeleri ve kullanıcı işlemleri burada kayıt altına alınır.</p>
@@ -118,7 +118,7 @@ render_header('Log Sistemi', 'logs');
         <form method="post" onsubmit="return confirm('TÜM log kayıtları kalıcı olarak silinecek. Emin misiniz?');">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="clear">
-            <button type="submit" class="btn btn-danger"><span class="ms sm">delete</span> Logları Temizle</button>
+            <button type="submit" class="btn btn-danger"><span class="ms sm"><?= svg_icon('delete') ?></span> Logları Temizle</button>
         </form>
     </div>
     <?php endif; ?>
@@ -133,7 +133,7 @@ render_header('Log Sistemi', 'logs');
 
 <div class="card" style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 18px;">
     <span class="section-label" style="display:inline-flex; align-items:center; gap:6px;">
-        <span class="ms sm">filter_list</span> Filtrele:
+        <span class="ms sm"><?= svg_icon('filter_list') ?></span> Filtrele:
     </span>
     <form method="get" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <select name="aralik" onchange="this.form.submit()" style="margin:0; width:auto; min-width:160px;">
@@ -162,7 +162,7 @@ render_header('Log Sistemi', 'logs');
         <thead>
         <tr>
             <th style="text-align: center;">Tarih &amp; Saat</th>
-            <th style="text-align: center;">Gerçekleştiren</th>
+            <th style="text-align: left;">Gerçekleştiren</th>
             <th style="text-align: center;">İşlem</th>
             <th style="text-align: center;">Detay</th>
             <th style="text-align: center;">IP Adresi</th>
@@ -194,7 +194,7 @@ render_header('Log Sistemi', 'logs');
         ?>
             <tr>
                 <td style="text-align: center;"><?= e(date('d.m.Y H:i:s', strtotime($log['created_at']))) ?></td>
-                <td style="text-align: center;">
+                <td style="text-align: left;">
                     <?php if (!empty($log['user_id']) && isset($userRoles[(int)$log['user_id']])): ?>
                         <a href="user_detail.php?id=<?= (int)$log['user_id'] ?>" style="display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;" class="hover:underline">
                             <?php if (!empty($userPhotos[(int)$log['user_id']])): ?>
@@ -225,9 +225,9 @@ render_header('Log Sistemi', 'logs');
     </div>
 
     <!-- Pagination Summary / Table Footer -->
-    <div class="px-5 py-3 flex justify-between items-center bg-[var(--hover)]/10 border border-[var(--card-border)] border-t-0" style="border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <p class="text-xs text-[var(--text-2)] m-0">Toplam <?= $totalLogs ?> kayıttan <?= $offset + 1 ?>-<?= min($totalLogs, $offset + $perPage) ?> arası gösteriliyor.</p>
-        <div class="flex gap-1" style="display:flex; gap:4px; align-items:center;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--card-bg); border: 1px solid var(--card-border); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius) var(--radius); margin-bottom: 24px; box-shadow: var(--shadow);">
+        <p class="muted" style="margin: 0; font-size: 13px; color: var(--text-2);">Toplam <?= $totalLogs ?> kayıttan <?= $offset + 1 ?>-<?= min($totalLogs, $offset + $perPage) ?> arası gösteriliyor.</p>
+        <div style="display: flex; gap: 6px; align-items: center;">
             <?php 
             $queryData = $_GET;
             
@@ -243,26 +243,26 @@ render_header('Log Sistemi', 'logs');
             ?>
             
             <?php if ($prevDisabled): ?>
-                <button type="button" class="btn btn-light btn-sm flex items-center justify-center p-1" disabled style="opacity:0.5; cursor:not-allowed;">
-                    <span class="ms text-[16px]">chevron_left</span>
+                <button type="button" class="btn btn-light btn-sm" disabled style="opacity:0.5; cursor:not-allowed; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; padding: 0;">
+                    <span class="ms text-[16px]"><?= svg_icon('chevron_left') ?></span>
                 </button>
             <?php else: ?>
-                <a href="<?= e($prevUrl) ?>" class="btn btn-light btn-sm flex items-center justify-center p-1 logs-pagination-btn">
-                    <span class="ms text-[16px]">chevron_left</span>
+                <a href="<?= e($prevUrl) ?>" class="btn btn-light btn-sm logs-pagination-btn" style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; padding: 0;">
+                    <span class="ms text-[16px]"><?= svg_icon('chevron_left') ?></span>
                 </a>
             <?php endif; ?>
             
-            <span class="px-3 py-1 text-xs font-bold text-[var(--text)] border border-[var(--card-border)] rounded bg-[var(--card-bg)]">
+            <span class="px-3 py-1 text-xs font-bold text-[var(--text)] border border-[var(--card-border)] rounded bg-[var(--card-bg)]" style="font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid var(--card-border); background:var(--card-bg);">
                 <?= $page ?> / <?= $totalPages ?>
             </span>
             
             <?php if ($nextDisabled): ?>
-                <button type="button" class="btn btn-light btn-sm flex items-center justify-center p-1" disabled style="opacity:0.5; cursor:not-allowed;">
-                    <span class="ms text-[16px]">chevron_right</span>
+                <button type="button" class="btn btn-light btn-sm" disabled style="opacity:0.5; cursor:not-allowed; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; padding: 0;">
+                    <span class="ms text-[16px]"><?= svg_icon('chevron_right') ?></span>
                 </button>
             <?php else: ?>
-                <a href="<?= e($nextUrl) ?>" class="btn btn-light btn-sm flex items-center justify-center p-1 logs-pagination-btn">
-                    <span class="ms text-[16px]">chevron_right</span>
+                <a href="<?= e($nextUrl) ?>" class="btn btn-light btn-sm logs-pagination-btn" style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; padding: 0;">
+                    <span class="ms text-[16px]"><?= svg_icon('chevron_right') ?></span>
                 </a>
             <?php endif; ?>
         </div>

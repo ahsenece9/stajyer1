@@ -11,21 +11,21 @@ $countsQuery = "SELECT
     SUM(start_date > CURDATE()) AS baslamadi
  FROM interns";
 if (is_mentor()) {
-    $countsQuery .= " WHERE mentor_id = " . (int)$_SESSION['user_id'];
+    $countsQuery .= " WHERE assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $counts = db()->query($countsQuery)->fetch();
 $toplam = (int) $counts['toplam'];
 
 $attTotalsQuery = "SELECT SUM(a.status='devamsiz') AS dev, SUM(a.status='izinli') AS izin FROM attendance a";
 if (is_mentor()) {
-    $attTotalsQuery .= " JOIN interns i ON i.id = a.intern_id WHERE i.mentor_id = " . (int)$_SESSION['user_id'];
+    $attTotalsQuery .= " JOIN interns i ON i.id = a.intern_id WHERE i.assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $attTotals = db()->query($attTotalsQuery)->fetch();
 
 /* ---- Bölüm bazlı dağılım (en kalabalık 6 bölüm) ---- */
 $deptsQuery = 'SELECT department, COUNT(*) AS c FROM interns';
 if (is_mentor()) {
-    $deptsQuery .= ' WHERE mentor_id = ' . (int)$_SESSION['user_id'];
+    $deptsQuery .= ' WHERE assigned_department = ' . db()->quote($_SESSION['user_department'] ?? '');
 }
 $deptsQuery .= ' GROUP BY department ORDER BY c DESC, department ASC LIMIT 6';
 $depts = db()->query($deptsQuery)->fetchAll();
@@ -58,7 +58,7 @@ foreach ($statusData as [$name, $val, $color]) {
 $attByIntern = [];
 $attByInternQuery = "SELECT a.intern_id, SUM(a.status='devamsiz') AS dev, SUM(a.status='izinli') AS izin FROM attendance a";
 if (is_mentor()) {
-    $attByInternQuery .= " JOIN interns i ON i.id = a.intern_id WHERE i.mentor_id = " . (int)$_SESSION['user_id'];
+    $attByInternQuery .= " JOIN interns i ON i.id = a.intern_id WHERE i.assigned_department = " . db()->quote($_SESSION['user_department'] ?? '');
 }
 $attByInternQuery .= " GROUP BY a.intern_id";
 foreach (db()->query($attByInternQuery)->fetchAll() as $row) {
@@ -67,7 +67,7 @@ foreach (db()->query($attByInternQuery)->fetchAll() as $row) {
 
 $internsQuery = 'SELECT * FROM interns WHERE start_date <= CURDATE()';
 if (is_mentor()) {
-    $internsQuery .= ' AND mentor_id = ' . (int)$_SESSION['user_id'];
+    $internsQuery .= ' AND assigned_department = ' . db()->quote($_SESSION['user_department'] ?? '');
 }
 $internsQuery .= ' ORDER BY start_date DESC LIMIT 25';
 $interns = db()->query($internsQuery)->fetchAll();

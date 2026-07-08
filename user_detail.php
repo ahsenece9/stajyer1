@@ -17,6 +17,33 @@ if (!$user) {
     redirect('users.php');
 }
 
+$myId = (int) $_SESSION['user_id'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $action = (string) ($_POST['action'] ?? '');
+
+    if ($action === 'update_role') {
+        $newRole = trim((string) ($_POST['role'] ?? ''));
+        $newDept = trim((string) ($_POST['department'] ?? ''));
+
+        if (!in_array($newRole, ['sistem_yoneticisi', 'kurum_staj_sorumlusu', 'birim_sorumlusu'], true)) {
+            flash_set('error', 'Geçersiz rol seçimi.');
+        } elseif ($id === $myId) {
+            flash_set('error', 'Kendi rolünüzü buradan değiştiremezsiniz.');
+        } else {
+            db()->prepare('UPDATE users SET role = ?, department = ? WHERE id = ?')
+                ->execute([$newRole, $newDept !== '' ? $newDept : null, $id]);
+            log_action('kullanici_rol_guncelle', $user['full_name'] . ' - Yeni Rol: ' . $newRole . ($newDept !== '' ? ', Birim: ' . $newDept : ''));
+            flash_set('success', 'Kullanıcının rolü ve birimi güncellendi.');
+        }
+        redirect('user_detail.php?id=' . $id);
+    }
+}
+
+// Daire başkanlığı seçenekleri (kontenjanlarda tanımlı birimlerden)
+$departmentOptions = db()->query('SELECT DISTINCT department_name FROM department_quotas ORDER BY department_name')->fetchAll(PDO::FETCH_COLUMN);
+
 // Atanmış stajyerleri çek
 $internsStmt = db()->prepare('SELECT * FROM interns WHERE mentor_id = ? ORDER BY first_name');
 $internsStmt->execute([$id]);
@@ -74,14 +101,24 @@ $roleLabels = [
 $roleLabel = $roleLabels[$user['role']] ?? $user['role'];
 
 // Departman belirleme
-$dept = 'Birim Sorumlusu';
-if ($user['role'] === 'sistem_yoneticisi') {
-    $dept = 'IT & Bilgi İşlem';
-} elseif ($user['role'] === 'kurum_staj_sorumlusu') {
-    $dept = 'İnsan Kaynakları';
+$dept = !empty($user['department']) ? $user['department'] : 'Birim Sorumlusu';
+if (empty($user['department'])) {
+    if ($user['role'] === 'sistem_yoneticisi') {
+        $dept = 'IT & Bilgi İşlem';
+    } elseif ($user['role'] === 'kurum_staj_sorumlusu') {
+        $dept = 'İnsan Kaynakları';
+    }
 }
 
-$userPhoto = !empty($user['photo']) ? 'uploads/' . $user['photo'] : 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2YrpFLFr6-rIUVkcgmHj0EkBcPl5GesG9LZ1m1vrb04zoGpjSSiHzTSi17DQvaEwCFNea33GK6RG4e3_89wIiIOxIn1tbXCqtz9nWeqBfH1laR-vXh6kfG2rP2kovAXpKcGGdq85ER2Tnb8iIzAfVI_Sw_hXpX9FuVHTkAhewJNwNWLpMFv4gZ9Jcc-UVPJ2cT6Z90GhvxAQYt0cOqsvFRha5Kr4D3QwgzlEifMP0OPIS6D_StJ5OXg';
+$hasUserPhoto = !empty($user['photo']);
+$userPhoto = $hasUserPhoto ? 'uploads/' . $user['photo'] : '';
+// Baş harf avatarı için kullanıcı adının baş harfleri
+$uWords = preg_split('/\s+/', trim((string) $user['full_name']));
+$userInitials = '';
+foreach ($uWords as $uw) {
+    if ($uw !== '') $userInitials .= mb_strtoupper(mb_substr($uw, 0, 1, 'UTF-8'), 'UTF-8');
+}
+$userInitials = mb_substr($userInitials, 0, 2, 'UTF-8');
 
 render_header($user['full_name'], 'users');
 ?>
@@ -110,7 +147,7 @@ render_header($user['full_name'], 'users');
                     "inverse-surface": "#2d3133",
                     "tertiary-fixed-dim": "#b7c8e1",
                     "surface-variant": "#e0e3e5",
-                    "primary": "#3525cd",
+                    "primary": "var(--primary)",
                     "on-primary-container": "#dad7ff",
                     "primary-fixed-dim": "#c3c0ff",
                     "on-tertiary-fixed-variant": "#38485d",
@@ -200,19 +237,37 @@ render_header($user['full_name'], 'users');
         box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08) !important;
     }
     .plinth-active {
-        border-bottom: 2px solid #3525cd !important;
+        border-bottom: 2px solid var(--primary) !important;
     }
     .drafting-line {
-        border-bottom: 1px solid #E2E8F0 !important;
+        border-bottom: 1px solid var(--card-border) !important;
     }
     .hide-scrollbar::-webkit-scrollbar {
         display: none;
     }
     .border-outline-variant\/30 {
-        border: 1px solid rgba(199, 196, 216, 0.3) !important;
+        border: 1px solid var(--card-border) !important;
     }
     .divide-outline-variant\/10 > :not([hidden]) ~ :not([hidden]) {
-        border-color: rgba(199, 196, 216, 0.1) !important;
+        border-color: var(--card-border) !important;
+    }
+    /* Theme Integration Overrides for Tailwind classes */
+    .bg-surface-container-lowest {
+        background-color: var(--card-bg) !important;
+        backdrop-filter: blur(12px) !important;
+        box-shadow: var(--shadow) !important;
+    }
+    .bg-surface-container-low {
+        background-color: var(--line-soft) !important;
+    }
+    .hover\:bg-surface-container-low:hover {
+        background-color: var(--hover) !important;
+    }
+    .text-on-surface {
+        color: var(--text) !important;
+    }
+    .text-on-surface-variant {
+        color: var(--text-2) !important;
     }
 </style>
 
@@ -244,7 +299,11 @@ render_header($user['full_name'], 'users');
             
             <div class="flex flex-col md:flex-row gap-6 items-center md:items-start">
                 <div class="relative flex-shrink-0">
-                    <img class="w-32 h-32 rounded-xl object-cover architect-shadow border border-outline-variant/30" src="<?= e($userPhoto) ?>">
+                    <?php if ($hasUserPhoto): ?>
+                        <img class="w-32 h-32 rounded-xl object-cover architect-shadow border border-outline-variant/30" src="<?= e($userPhoto) ?>">
+                    <?php else: ?>
+                        <div class="w-32 h-32 rounded-xl architect-shadow border border-outline-variant/30 flex items-center justify-center font-black text-4xl" style="background: var(--primary); color:#fff;"><?= e($userInitials) ?></div>
+                    <?php endif; ?>
                     <div class="absolute -bottom-1 -right-1 bg-primary text-on-primary p-1.5 rounded-full shadow-lg flex items-center justify-center">
                         <span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">verified</span>
                     </div>
@@ -257,15 +316,15 @@ render_header($user['full_name'], 'users');
                     <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-xs text-on-surface-variant">
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Telefon</span>
-                            <span class="font-semibold text-on-surface mt-0.5">+90 532 000 00 00</span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['phone']) ? e($user['phone']) : '<span class="text-gray-400">—</span>' ?></span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">E-posta</span>
-                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['email']) ? e($user['email']) : e($user['username']) . '@stajtakip.com' ?></span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['email']) ? e($user['email']) : '<span class="text-gray-400">—</span>' ?></span>
                         </div>
                         <div class="flex flex-col">
-                            <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Departman</span>
-                            <span class="font-semibold text-on-surface mt-0.5"><?= e($dept) ?></span>
+                            <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Departman / Unvan</span>
+                            <span class="font-semibold text-on-surface mt-0.5"><?= !empty($user['title']) ? e($user['title']) : e($dept) ?></span>
                         </div>
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider">Katılım Tarihi</span>
@@ -279,14 +338,22 @@ render_header($user['full_name'], 'users');
             <div class="border-t border-slate-100 pt-4 mt-2">
                 <span class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider block mb-1">Hakkında / Yönetim Rolü</span>
                 <p class="text-xs text-on-surface-variant leading-relaxed m-0">
-                    Sistem Yöneticisi yetkileri ile kullanıcı hesaplarının güvenliği, staj koordinasyonu, stajyer kayıtları ve genel departman raporlarının doğrulanmasından sorumludur.
+                    <?php
+                    if ($user['role'] === 'sistem_yoneticisi') {
+                        echo 'Sistem Yöneticisi yetkileri ile kullanıcı hesaplarının güvenliği, staj koordinasyonu, stajyer kayıtları ve genel departman raporlarının doğrulanmasından sorumludur.';
+                    } elseif ($user['role'] === 'kurum_staj_sorumlusu') {
+                        echo 'Kurum staj sorumlusu yetkileri ile genel kontenjan yönetimi, stajyer kabulleri, departman kotalarının takibi ve İK süreçlerinden sorumludur.';
+                    } else {
+                        echo 'Birim sorumlusu yetkileri ile birime atanan stajyerlerin takibi, günlük yoklama onayları ve stajyer değerlendirme işlemlerinden sorumludur.';
+                    }
+                    ?>
                 </p>
             </div>
         </div>
 
         <!-- Stats/Quick Info Card -->
         <div class="col-span-12 lg:col-span-4 grid grid-rows-2 gap-gutter">
-            <div class="bg-primary text-on-primary-container architect-shadow rounded-xl p-5 flex flex-col justify-between">
+            <div class="bg-primary text-on-primary-container architect-shadow rounded-xl p-5 flex flex-col justify-between active-interns-card">
                 <div class="flex justify-between items-start">
                     <span class="text-[9px] font-bold opacity-80 uppercase tracking-widest text-white">Aktif Stajyerler</span>
                     <span class="material-symbols-outlined text-white text-base">group</span>
@@ -340,10 +407,12 @@ render_header($user['full_name'], 'users');
                 </thead>
                 <tbody class="divide-y divide-outline-variant/10">
                     <?php if (count($assignedInterns) > 0): ?>
-                        <?php foreach ($assignedInterns as $intern): 
+                        <?php foreach ($assignedInterns as $intern):
                             $internFullName = $intern['first_name'] . ' ' . $intern['last_name'];
-                            $internPhoto = !empty($intern['photo']) ? 'uploads/' . $intern['photo'] : 'https://lh3.googleusercontent.com/aida-public/AB6AXuCbvZYfwbPtlm0X07nVa6NQu1owaiL-goquhSjT-DPpj8ZmQoMIED6RmluRazyUPly2J9Iz1p1nbvcD2xlzSp0iq2g_z_Q-eR511dbvjBgqHOUzRG4spfKD7cmuVY4inaUncj2sIAusyM0T26Nce3Me-WkpGbX5EYhxybIfFsbIZB5juBVFBo0-Zrcm2giVm-U8eULL9cDYK7y1HOReermbQRsVjp37yg08oAzN18Lu7jBeOMbe3D80NA';
-                            
+                            $hasInternPhoto = !empty($intern['photo']);
+                            $internPhoto = $hasInternPhoto ? 'uploads/' . $intern['photo'] : '';
+                            $internInitials = mb_strtoupper(mb_substr($intern['first_name'], 0, 1, 'UTF-8') . mb_substr($intern['last_name'], 0, 1, 'UTF-8'), 'UTF-8');
+
                             // Durum Hesabı
                             $today = date('Y-m-d');
                             $attStmt = db()->prepare('SELECT status FROM attendance WHERE intern_id = ? AND work_date = ?');
@@ -364,7 +433,11 @@ render_header($user['full_name'], 'users');
                         <tr class="hover:bg-surface-container-low/50 transition-colors">
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-3">
-                                    <img alt="<?= e($internFullName) ?>" class="w-8 h-8 rounded-full object-cover" src="<?= e($internPhoto) ?>">
+                                    <?php if ($hasInternPhoto): ?>
+                                        <img alt="<?= e($internFullName) ?>" class="w-8 h-8 rounded-full object-cover" src="<?= e($internPhoto) ?>">
+                                    <?php else: ?>
+                                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px]" style="background: rgba(var(--primary-rgb, 26 54 115) / 0.12); color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent);"><?= e($internInitials) ?></div>
+                                    <?php endif; ?>
                                     <span class="font-medium text-on-surface"><?= e($internFullName) ?></span>
                                 </div>
                             </td>
@@ -396,10 +469,42 @@ render_header($user['full_name'], 'users');
         </div>
     </section>
 
+    <!-- Rol & Birim Yönetimi -->
+    <section class="bg-surface-container-lowest architect-shadow border border-outline-variant/30 rounded-xl p-6">
+        <h3 class="font-headline-md text-headline-md text-on-surface m-0 mb-1">Rol &amp; Birim Yönetimi</h3>
+        <?php if ($id === $myId): ?>
+            <p class="text-xs text-on-surface-variant m-0">Kendi rolünüzü ve biriminizi buradan değiştiremezsiniz.</p>
+        <?php else: ?>
+            <p class="text-xs text-on-surface-variant m-0 mb-4">Bu kullanıcının sistemdeki rolünü ve atandığı daire başkanlığını güncelleyin. Değişiklik, kullanıcının bir sonraki girişinde geçerli olur.</p>
+            <form method="post" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="update_role">
+                <div>
+                    <label class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider block mb-1">Rol</label>
+                    <select name="role" class="w-full border border-outline-variant/30 rounded-lg px-3 py-2 text-sm bg-transparent text-on-surface">
+                        <option value="birim_sorumlusu" <?= $user['role'] === 'birim_sorumlusu' ? 'selected' : '' ?>>Birim Sorumlusu</option>
+                        <option value="kurum_staj_sorumlusu" <?= $user['role'] === 'kurum_staj_sorumlusu' ? 'selected' : '' ?>>Staj Sorumlusu (İK)</option>
+                        <option value="sistem_yoneticisi" <?= $user['role'] === 'sistem_yoneticisi' ? 'selected' : '' ?>>Sistem Yöneticisi</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[9px] font-bold text-on-surface-variant/60 uppercase tracking-wider block mb-1">Daire Başkanlığı / Birim</label>
+                    <input type="text" name="department" list="departmentOptions" value="<?= e($user['department'] ?? '') ?>" placeholder="örn. Bilgi İşlem Dairesi Başkanlığı" class="w-full border border-outline-variant/30 rounded-lg px-3 py-2 text-sm bg-transparent text-on-surface">
+                    <datalist id="departmentOptions">
+                        <?php foreach ($departmentOptions as $deptOption): ?>
+                            <option value="<?= e($deptOption) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+                <button type="submit" class="px-5 py-2 bg-primary text-on-primary rounded-lg font-semibold text-sm shadow-sm hover:opacity-90 transition-all border-none cursor-pointer">Güncelle</button>
+            </form>
+        <?php endif; ?>
+    </section>
+
     <!-- Bottom Action Footer -->
     <div class="pt-10 flex justify-end gap-4">
         <a href="settings.php" class="px-6 py-3 border border-outline-variant text-on-surface rounded-xl font-medium hover:bg-surface-container-low transition-colors" style="text-decoration: none;">Profil Düzenle</a>
-        <a href="users.php" class="px-6 py-3 bg-primary text-on-primary rounded-xl font-medium shadow-lg hover:shadow-primary/30 transition-all" style="text-decoration: none;">Yetkileri Yönet</a>
+        <a href="users.php" class="px-6 py-3 bg-primary text-on-primary rounded-xl font-medium shadow-lg hover:shadow-primary/30 transition-all manage-auths-btn" style="text-decoration: none;">Yetkileri Yönet</a>
     </div>
 </div>
 

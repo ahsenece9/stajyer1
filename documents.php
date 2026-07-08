@@ -14,6 +14,11 @@ if (!$intern) {
     redirect('index.php');
 }
 
+if (is_mentor() && trim(mb_strtolower((string)($intern['assigned_department'] ?? ''))) !== trim(mb_strtolower($_SESSION['user_department'] ?? ''))) {
+    flash_set('error', 'Bu stajyerin belgelerini görüntüleme yetkiniz bulunmamaktadır.');
+    redirect('index.php');
+}
+
 $fullName = $intern['first_name'] . ' ' . $intern['last_name'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

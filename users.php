@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // E-posta ve fotoğraf ile tüm kullanıcıları çek
-$users = db()->query('SELECT id, username, full_name, email, role, photo, created_at FROM users ORDER BY full_name')->fetchAll();
+$users = db()->query('SELECT id, username, full_name, email, role, department, photo, created_at FROM users ORDER BY full_name')->fetchAll();
 
 // Her yetkiliye atanmış stajyerler
 $assigned = [];
@@ -215,11 +215,13 @@ render_header('Yetkili Kullanıcılar', 'users');
         z-index: 1000;
         opacity: 0;
         pointer-events: none;
-        transition: all 0.25s ease;
+        visibility: hidden;  /* kapalıyken tıklamayı yakalamasın (donma önlemi) */
+        transition: opacity 0.25s ease, visibility 0.25s ease;
     }
     .user-modal-overlay.open {
         opacity: 1;
         pointer-events: auto;
+        visibility: visible;
     }
     .user-modal-card {
         background: var(--card-bg);
@@ -262,19 +264,70 @@ render_header('Yetkili Kullanıcılar', 'users');
         box-shadow: 0 0 0 3px rgba(53, 37, 205, 0.12) !important;
     }
     
-    /* Bento ve Tablo Kartlarının Tüm Kenarlık Çizgilerini Son Derece İnce ve Hafif Yap */
+    /* Theme Integration Overrides for Tailwind classes */
+    .bg-surface-container-lowest {
+        background-color: var(--card-bg) !important;
+        backdrop-filter: blur(12px) !important;
+        box-shadow: var(--shadow) !important;
+    }
+    .bg-surface-container-low,
+    .bg-surface-container-low\/50,
+    .bg-surface-container-low\/30 {
+        background-color: var(--line-soft) !important;
+    }
+    .hover\:bg-surface-container-low\/30:hover {
+        background-color: var(--hover) !important;
+    }
+    .hover\:bg-surface-container-highest:hover {
+        background-color: var(--hover) !important;
+    }
     .border-outline-variant {
-        border: 1px solid #e0e3e5 !important;
+        border: 1px solid var(--card-border) !important;
     }
     .divide-outline-variant > :not([hidden]) ~ :not([hidden]) {
-        border-color: #e0e3e5 !important;
+        border-color: var(--card-border) !important;
     }
     .border-b.border-outline-variant {
-        border-bottom: 1px solid #e0e3e5 !important;
+        border-bottom: 1px solid var(--card-border) !important;
     }
     .border-t.border-outline-variant {
-        border-top: 1px solid #e0e3e5 !important;
+        border-top: 1px solid var(--card-border) !important;
     }
+    .text-on-surface {
+        color: var(--text) !important;
+    }
+    .text-on-surface-variant {
+        color: var(--text-2) !important;
+    }
+
+    /* Kullanıcı tablosu: yatay scroll bar olmadan sığsın */
+    .overflow-x-auto { overflow-x: hidden !important; }
+    table.w-full th,
+    table.w-full td {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+    table.w-full { table-layout: fixed; }
+    table.w-full th:nth-child(1) { width: 18%; }  /* Kullanıcı */
+    table.w-full th:nth-child(2) { width: 20%; }  /* Birim */
+    table.w-full th:nth-child(3) { width: 14%; }  /* Rol */
+    table.w-full th:nth-child(4) { width: 12%; }  /* Stajyer Sayısı */
+    table.w-full th:nth-child(5) { width: 16%; }  /* E-posta */
+    table.w-full th:nth-child(6) { width: 10%; }  /* Durum */
+    table.w-full th:nth-child(7) { width: 10%; }  /* İşlemler */
+    /* Hiçbir hücre içeriği komşu kolona taşmasın */
+    table.w-full td { overflow: hidden; }
+    /* Birim adı uzunsa alt satıra kaysın (kesilmesin), komşuya taşmasın */
+    table.w-full td:nth-child(2) { white-space: normal; word-break: break-word; }
+    /* Uzun e-posta adresleri taşmasın, gerekiyorsa "…" ile kısalsın */
+    table.w-full td .font-label-technical {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* Başlıkları biraz daha küçük tutarak sığdır */
+    table.w-full thead th { font-size: 10px; }
 </style>
 
 <!-- Breadcrumbs & Header -->
@@ -349,6 +402,7 @@ render_header('Yetkili Kullanıcılar', 'users');
             <thead class="bg-surface-container-low/50 text-label-technical text-on-surface-variant uppercase tracking-wider border-b border-outline-variant">
                 <tr>
                     <th class="px-6 py-4 font-medium text-left">Kullanıcı</th>
+                    <th class="px-6 py-4 font-medium text-center">Birim</th>
                     <th class="px-6 py-4 font-medium text-center">Rol</th>
                     <th class="px-6 py-4 font-medium text-center">Stajyer Sayısı</th>
                     <th class="px-6 py-4 font-medium text-center">E-posta</th>
@@ -379,13 +433,6 @@ render_header('Yetkili Kullanıcılar', 'users');
                     $initials = mb_substr($initials, 0, 2);
                     $colorClass = $bgColors[$u['id'] % count($bgColors)];
                     
-                    // Departman ismi (Role göre dinamik mocklama)
-                    $dept = 'Birim Sorumlusu';
-                    if ($u['role'] === 'sistem_yoneticisi') {
-                        $dept = 'IT & Bilgi İşlem';
-                    } elseif ($u['role'] === 'kurum_staj_sorumlusu') {
-                        $dept = 'İnsan Kaynakları';
-                    }
                 ?>
                 <tr onclick="window.location.href='user_detail.php?id=<?= (int)$u['id'] ?>'" class="group hover:bg-surface-container-low/30 transition-all cursor-pointer">
                     <td class="px-6 py-4 text-left">
@@ -406,9 +453,13 @@ render_header('Yetkili Kullanıcılar', 'users');
                                         <span class="ml-1.5 px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded">SİZ</span>
                                     <?php endif; ?>
                                 </p>
-                                <p class="text-body-sm text-on-surface-variant m-0 mt-0.5"><?= e($dept) ?></p>
                             </div>
                         </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="text-body-md font-semibold text-on-surface">
+                            <?= !empty($u['department']) ? e($u['department']) : '<span class="text-on-surface-variant/40">—</span>' ?>
+                        </span>
                     </td>
                     <td class="px-6 py-4 text-center">
                         <?php 

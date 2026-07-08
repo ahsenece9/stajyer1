@@ -31,11 +31,15 @@ if (count($changes) > 200) {
     json_fail('Tek seferde en fazla 200 değişiklik kaydedilebilir.');
 }
 
-$stmt = db()->prepare('SELECT start_date, end_date, first_name, last_name FROM interns WHERE id = ?');
+$stmt = db()->prepare('SELECT start_date, end_date, first_name, last_name, assigned_department FROM interns WHERE id = ?');
 $stmt->execute([$internId]);
 $intern = $stmt->fetch();
 if (!$intern) {
     json_fail('Stajyer bulunamadı.', 404);
+}
+
+if (is_mentor() && trim(mb_strtolower((string)($intern['assigned_department'] ?? ''))) !== trim(mb_strtolower($_SESSION['user_department'] ?? ''))) {
+    json_fail('Bu stajyer için yoklama girmeye yetkiniz bulunmamaktadır.', 403);
 }
 
 /* Tüm değişiklikleri doğrula */
