@@ -142,8 +142,27 @@ function e(mixed $s): string
     return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 }
 
+function is_ajax_request(): bool
+{
+    return isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+        && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+}
+
 function redirect(string $url): never
 {
+    // AJAX ile gönderilen formlar için sayfayı yeniden yüklemek yerine
+    // JSON döndürürüz; istemci tarafı flash mesajını açılır pencerede gösterir.
+    if (is_ajax_request()) {
+        $flash = flash_get(); // az önce set edilen flash mesajını tüket
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ajax'     => true,
+            'redirect' => $url,
+            'type'     => $flash['type'] ?? 'success',
+            'msg'      => $flash['msg'] ?? '',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     header('Location: ' . $url);
     exit;
 }
@@ -1244,5 +1263,102 @@ function render_footer(): void
         }
     })();
     </script>';
+
+    render_ajax_saver();
+
     echo '</body></html>';
+}
+
+/**
+ * Sayfa yenilenmeden kaydetme: POST formlarını AJAX ile gönderir,
+ * sonucu açılır bir bildirimde gösterir. render_footer ve kendi HTML
+ * iskeletine sahip sayfalar (ör. notes.php) bunu çağırır.
+ */
+function render_ajax_saver(): void
+{
+    echo '<div id="ajaxPopupOverlay" class="ajx-overlay" aria-hidden="true">'
+        . '<div class="ajx-card" role="alertdialog" aria-live="assertive">'
+        . '<div class="ajx-icon" id="ajxIcon">&#10003;</div>'
+        . '<div class="ajx-msg" id="ajxMsg"></div>'
+        . '<button type="button" class="btn btn-primary btn-sm" id="ajxOk">Tamam</button>'
+        . '</div></div>';
+    echo '<style>
+    .ajx-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:3000;opacity:0;pointer-events:none;transition:opacity .2s ease;}
+    .ajx-overlay.open{opacity:1;pointer-events:auto;}
+    .ajx-card{background:var(--card-bg,#fff);border:1px solid var(--card-border,#e5e7eb);border-radius:16px;padding:26px 28px;width:100%;max-width:360px;margin:0 16px;text-align:center;box-shadow:0 20px 40px -12px rgba(0,0,0,.28);transform:scale(.92);transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
+    .ajx-overlay.open .ajx-card{transform:scale(1);}
+    .ajx-icon{width:56px;height:56px;line-height:56px;margin:0 auto 14px;border-radius:50%;font-size:30px;font-weight:700;}
+    .ajx-icon.ok{background:rgba(34,197,94,.14);color:#16a34a;}
+    .ajx-icon.err{background:rgba(239,68,68,.14);color:#dc2626;}
+    .ajx-msg{font-size:14px;color:var(--text,#111827);margin-bottom:20px;line-height:1.5;}
+    .ajx-card .btn{min-width:110px;}
+    </style>';
+    echo '<script>
+    (function(){
+        var overlay=document.getElementById("ajaxPopupOverlay");
+        var iconEl=document.getElementById("ajxIcon");
+        var msgEl=document.getElementById("ajxMsg");
+        var okBtn=document.getElementById("ajxOk");
+        if(!overlay||!okBtn)return;
+        var pendingRedirect=null;
+
+        function showPopup(type,msg,redirect){
+            pendingRedirect=redirect||null;
+            var ok=(type!=="error");
+            iconEl.className="ajx-icon "+(ok?"ok":"err");
+            iconEl.innerHTML=ok?"&#10003;":"&#33;";
+            msgEl.textContent=msg||(ok?"İşlem başarıyla tamamlandı.":"Bir hata oluştu.");
+            overlay.classList.add("open");
+            okBtn.focus();
+        }
+        function closePopup(){
+            overlay.classList.remove("open");
+            var cur=location.pathname+location.search;
+            var r=pendingRedirect; pendingRedirect=null;
+            if(r){
+                try{
+                    var tgt=new URL(r,location.href);
+                    if((tgt.pathname+tgt.search)!==cur){location.href=r;}
+                }catch(_){}
+            }
+        }
+        okBtn.addEventListener("click",closePopup);
+        overlay.addEventListener("click",function(e){if(e.target===overlay)closePopup();});
+        document.addEventListener("keydown",function(e){
+            if(overlay.classList.contains("open")&&(e.key==="Enter"||e.key==="Escape")){e.preventDefault();closePopup();}
+        });
+
+        document.addEventListener("submit",function(e){
+            var form=e.target;
+            if(!(form instanceof HTMLFormElement))return;
+            if(e.defaultPrevented)return;                 // confirm() iptali gibi durumlara saygı göster
+            var method=(form.getAttribute("method")||"get").toLowerCase();
+            if(method!=="post")return;                    // arama gibi GET formlarına dokunma
+            if(form.hasAttribute("data-no-ajax"))return;
+
+            e.preventDefault();
+            var submitBtn=form.querySelector("[type=submit]");
+            if(submitBtn)submitBtn.disabled=true;
+            var action=form.getAttribute("action")||location.href;
+
+            fetch(action,{
+                method:"POST",
+                body:new FormData(form),
+                headers:{"X-Requested-With":"XMLHttpRequest"},
+                credentials:"same-origin"
+            }).then(function(r){
+                var ct=r.headers.get("content-type")||"";
+                if(ct.indexOf("application/json")===-1)throw new Error("non-json");
+                return r.json();
+            }).then(function(data){
+                if(submitBtn)submitBtn.disabled=false;
+                showPopup(data.type,data.msg,data.redirect);
+            }).catch(function(){
+                // Güvenlik ağı: beklenmedik yanıtta klasik gönderim (veri asla kaybolmasın)
+                if(submitBtn)submitBtn.disabled=false;
+                form.submit();
+            });
+        },false);
+    })();
+    </script>';
 }

@@ -361,7 +361,7 @@ void main() {
 <!-- ==================== / ANIMASYONLU ARKA PLAN ==================== -->
 
 <!-- Main Container -->
-<main class="relative z-10 w-full max-w-5xl mx-4 lg:mx-auto h-[90vh] max-h-[620px] flex shadow-2xl rounded-3xl overflow-hidden bg-white/10 backdrop-blur-sm animate-entrance">
+<main class="relative z-10 w-full max-w-5xl mx-4 lg:mx-auto h-auto max-h-[92vh] my-4 flex shadow-2xl rounded-3xl overflow-hidden bg-white/10 backdrop-blur-sm animate-entrance">
     <!-- Left Side: Slideshow -->
     <section class="hidden lg:flex w-1/2 relative overflow-hidden">
         <div class="absolute inset-0 w-full h-full" id="slideshow-container">
@@ -398,10 +398,10 @@ void main() {
     </section>
 
     <!-- Right Side: Registration Form -->
-    <section class="w-full lg:w-1/2 glass-card p-6 md:p-10 flex flex-col justify-center overflow-y-auto form-scrollbar">
+    <section class="w-full lg:w-1/2 glass-card p-5 md:p-8 flex flex-col justify-center overflow-y-auto form-scrollbar">
         <div class="max-w-md w-full mx-auto">
             <!-- Mobile Branding -->
-            <div class="lg:hidden flex items-center gap-3 mb-8">
+            <div class="lg:hidden flex items-center gap-3 mb-5">
                 <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden border border-outline-variant/30 flex-shrink-0">
                     <img src="<?= logo_url() ?>" style="width:80%; height:80%; object-fit:contain;">
                 </div>
@@ -410,7 +410,7 @@ void main() {
                     <span class="text-primary text-[18px] font-extrabold tracking-tight leading-tight">Staj Takip Sistemi</span>
                 </div>
             </div>
-            <div class="mb-6">
+            <div class="mb-4">
                 <h1 class="font-headline-lg text-headline-lg text-on-background mb-1">Kurumsal Kayıt</h1>
                 <p class="font-body-sm text-body-sm text-on-surface-variant">Birim sorumlusu hesabı oluşturmak için bilgilerinizi girin.</p>
             </div>
@@ -421,7 +421,7 @@ void main() {
                 </div>
             <?php endif; ?>
 
-            <form class="space-y-4" id="register-form" method="post" autocomplete="off">
+            <form class="space-y-3" id="register-form" method="post" autocomplete="off">
                 <?= csrf_field() ?>
                 
                 <!-- Yetkili Adı Soyadı -->
@@ -476,14 +476,14 @@ void main() {
                 </div>
 
                 <!-- CTA Button -->
-                <button class="register-cta group w-full py-3.5 rounded-xl font-headline-md text-headline-md flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] mt-6" id="register-btn" type="submit" style="--mx:50%; --my:50%;">
+                <button class="register-cta group w-full py-3 rounded-xl font-headline-md text-headline-md flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] mt-4" id="register-btn" type="submit" style="--mx:50%; --my:50%;">
                     <span class="relative z-10">Kayıt Ol</span>
                     <span class="material-symbols-outlined relative z-10 transition-transform group-hover:translate-x-1">arrow_forward</span>
                 </button>
             </form>
             
             <!-- Footer Links -->
-            <div class="mt-8 text-center">
+            <div class="mt-4 text-center">
                 <p class="font-body-sm text-body-sm text-on-surface-variant">
                     Zaten bir hesabınız var mı? <a class="text-primary font-bold hover:underline" href="login.php">Giriş Yap</a>
                 </p>

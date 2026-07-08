@@ -1037,5 +1037,6 @@ $subtitle = e($intern['department']) . ' Stajyeri • ' . $currentWeek . '. Haft
         frame();
     })();
 </script>
+<?php render_ajax_saver(); ?>
 </body>
 </html>
